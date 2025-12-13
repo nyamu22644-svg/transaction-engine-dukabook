@@ -1,0 +1,7 @@
+{
+  "name": "DukaBook",
+  "description": "Digital counter book for hardware stores with GPS verification and automated inventory management.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

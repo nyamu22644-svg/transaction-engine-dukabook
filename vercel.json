@@ -1,0 +1,10 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/expiry-checker",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}
