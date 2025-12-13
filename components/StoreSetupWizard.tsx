@@ -214,7 +214,7 @@ export const StoreSetupWizard: React.FC<StoreSetupWizardProps> = ({ onComplete, 
       }
 
       if (!result?.store) {
-        setError('Failed to create account. Email may already be registered.');
+        setError('Failed to create account. Email may already be registered. Try logging in instead.');
         setLoading(false);
         return;
       }
@@ -230,7 +230,10 @@ export const StoreSetupWizard: React.FC<StoreSetupWizardProps> = ({ onComplete, 
       setCreatedStore(storeWithLocation);
       setStep('complete');
     } catch (err) {
-      setError('Something went wrong. Please try again.');
+      // Show specific error message from signup service
+      const errorMsg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setError(errorMsg);
+      console.error('Signup error:', err);
     } finally {
       setLoading(false);
     }

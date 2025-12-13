@@ -25,35 +25,46 @@ export interface SignUpPayload {
 
 /**
  * Sign up a new user (Store Owner)
+ * 
+ * FIXED: Create all database records FIRST, then create auth account LAST.
+ * This ensures if any step fails, no auth account is created.
  */
 export const signUp = async (payload: SignUpPayload): Promise<{ user: AuthUser; store: StoreProfile } | null> => {
   if (!isSupabaseEnabled || !supabase) return null;
 
   try {
-    // 1. Attempt to create auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: payload.email,
-      password: payload.password,
-    });
+    // STEP 1: Create store FIRST (with temporary owner_id, will update after auth user is created)
+    const storeId = `store_${Math.random().toString(36).substr(2, 9)}`;
+    const { data: storeData, error: storeError } = await supabase
+      .from('stores')
+      .insert({
+        id: storeId,
+        owner_id: null, // Will update after auth user is created
+        name: payload.storeName || `${payload.full_name}'s Store`,
+        business_type: payload.businessType || 'GENERAL',
+        access_code: `ACC${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        owner_pin: '1234', // Default, should be changed
+      })
+      .select()
+      .single();
 
-    // If auth.signUp returned an error (likely email exists), handle gracefully
-    if (authError) {
-      console.warn('Auth signUp error:', authError.message || authError);
+    if (storeError) {
+      console.error('Store creation failed:', storeError);
+      throw new Error('Failed to create store. Please try again.');
+    }
 
-      // Try to find an existing profile in the `users` table
-      const { data: existingUser, error: findError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', payload.email.toLowerCase())
-        .single();
+    // STEP 2: Check if email already exists in users table (catch early before auth)
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', payload.email.toLowerCase())
+      .single();
 
-      if (findError || !existingUser) {
-        // No profile exists — can't link automatically. Tell caller to log in.
-        throw new Error('Email already registered in Auth but no user profile exists. Please log in.');
-      }
-
-      // An account already exists. Instead of auto-creating a store, return a signal
-      // so the UI can ask the owner whether to create and link a store now.
+    if (existingUser) {
+      // Rollback store creation
+      await supabase.from('stores').delete().eq('id', storeId);
+      
+      // Email already registered
       return {
         user: {
           id: existingUser.id,
@@ -63,31 +74,44 @@ export const signUp = async (payload: SignUpPayload): Promise<{ user: AuthUser; 
           store_id: existingUser.store_id,
         },
         store: null,
-        needsStoreCreation: true,
+        needsStoreCreation: !existingUser.store_id,
       } as any;
     }
 
-    if (!authData?.user) throw new Error('User creation failed');
+    // STEP 3: Now create the AUTH ACCOUNT (after store is ready and no email conflict)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: payload.email,
+      password: payload.password,
+    });
 
-    // 2. Create store for the newly created auth user first
+    if (authError) {
+      // Auth creation failed - rollback store creation
+      await supabase.from('stores').delete().eq('id', storeId);
+      console.error('Auth creation failed:', authError);
+      throw new Error('Failed to create account. Please try again.');
+    }
+
+    if (!authData?.user) {
+      // Rollback store
+      await supabase.from('stores').delete().eq('id', storeId);
+      throw new Error('User creation failed');
+    }
+
     const userId = authData.user.id;
-    const storeId = `store_${Math.random().toString(36).substr(2, 9)}`;
-    const { data: storeData, error: storeError } = await supabase
+
+    // STEP 4: Update store with owner_id
+    const { error: storeUpdateError } = await supabase
       .from('stores')
-      .insert({
-        id: storeId,
-        owner_id: userId,
-        name: payload.storeName || `${payload.full_name}'s Store`,
-        business_type: payload.businessType || 'GENERAL',
-        access_code: `ACC${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-        owner_pin: '1234', // Default, should be changed
-      })
-      .select()
-      .single();
+      .update({ owner_id: userId })
+      .eq('id', storeId);
 
-    if (storeError) throw storeError;
+    if (storeUpdateError) {
+      // Rollback: delete store
+      await supabase.from('stores').delete().eq('id', storeId);
+      throw new Error('Failed to link store to account.');
+    }
 
-    // 3. Insert user profile only after store creation succeeds
+    // STEP 5: Insert user profile
     const { data: userData, error: userError } = await supabase
       .from('users')
       .insert({
@@ -112,8 +136,11 @@ export const signUp = async (payload: SignUpPayload): Promise<{ user: AuthUser; 
       throw userError;
     }
 
-    // 4. Create 7-day trial subscription for the new store
-    await createTrialSubscription(storeId);
+    // STEP 6: Create 7-day trial subscription for the new store
+    const trialResult = await createTrialSubscription(storeId);
+    if (!trialResult) {
+      console.warn('Failed to create trial subscription, but signup completed');
+    }
 
     return {
       user: {
@@ -127,7 +154,9 @@ export const signUp = async (payload: SignUpPayload): Promise<{ user: AuthUser; 
     };
   } catch (error) {
     console.error('Signup error:', error);
-    return null;
+    const errorMsg = error instanceof Error ? error.message : 'Signup failed. Please try again.';
+    // Return null but log the actual error for debugging
+    throw new Error(errorMsg);
   }
 };
 

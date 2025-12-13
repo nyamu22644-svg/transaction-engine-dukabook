@@ -1,12 +1,6 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "env": {
-    "VITE_SUPABASE_URL": "@vite_supabase_url",
-    "VITE_SUPABASE_ANON_KEY": "@vite_supabase_anon_key",
-    "VITE_INTASEND_PUBLIC_KEY": "@vite_intasend_public_key",
-    "VITE_INTASEND_SECRET_KEY": "@vite_intasend_secret_key"
-  },
   "crons": [
     {
       "path": "/api/expiry-checker",
