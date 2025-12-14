@@ -8,6 +8,8 @@ interface BarcodeScannerProps {
   onClose: () => void;
 }
 
+type ScanStatus = 'searching' | 'found' | 'not-found' | 'duplicate' | 'error' | null;
+
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   const videoRef = useRef<HTMLDivElement>(null);
   const [manualMode, setManualMode] = useState(false);
@@ -18,6 +20,10 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
   const [scanError, setScanError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [scanStatus, setScanStatus] = useState<ScanStatus>(null);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [detectedBarcodes, setDetectedBarcodes] = useState<Set<string>>(new Set());
+  const [showScanFrame, setShowScanFrame] = useState(true);
 
   // Initialize Quagga2 barcode scanner
   useEffect(() => {
@@ -159,20 +165,57 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
   };
 
   const handleBarcodeDetected = (barcode: string) => {
-    setLastScanned(barcode);
-    playSuccessSound(); // Play success beep
-    
-    // Check if barcode exists in catalog
-    const results = searchCatalog(barcode);
-    const exactMatch = results.find(item => item.barcode === barcode);
-    
-    if (exactMatch) {
-      setMatchedItem(exactMatch);
-      onScan(barcode, exactMatch);
-    } else {
-      setMatchedItem(null);
-      onScan(barcode);
+    // Prevent duplicate rapid detections
+    if (detectedBarcodes.has(barcode)) {
+      setScanStatus('duplicate');
+      setStatusMessage('Already scanned - clearing in 1 second');
+      playErrorSound();
+      setTimeout(() => {
+        setDetectedBarcodes(new Set());
+        setScanStatus(null);
+      }, 1000);
+      return;
     }
+
+    // Add to detected set and show it's being processed
+    setDetectedBarcodes(prev => new Set([...prev, barcode]));
+    setScanStatus('searching');
+    setStatusMessage('🔍 Searching catalog...');
+    
+    // Give visual feedback before searching
+    setTimeout(() => {
+      setLastScanned(barcode);
+      
+      // Check if barcode exists in catalog
+      const results = searchCatalog(barcode);
+      const exactMatch = results.find(item => item.barcode === barcode);
+      
+      if (exactMatch) {
+        setScanStatus('found');
+        setStatusMessage(`✅ Found: ${exactMatch.item_name}`);
+        setMatchedItem(exactMatch);
+        playSuccessSound();
+        
+        // Auto-close after showing success
+        setTimeout(() => {
+          onScan(barcode, exactMatch);
+          setDetectedBarcodes(new Set());
+          setScanStatus(null);
+        }, 800);
+      } else {
+        setScanStatus('not-found');
+        setStatusMessage(`❌ Not in catalog: ${barcode}`);
+        setMatchedItem(null);
+        playErrorSound();
+        
+        // Still process it but show warning
+        setTimeout(() => {
+          onScan(barcode);
+          setDetectedBarcodes(new Set());
+          setScanStatus(null);
+        }, 2000);
+      }
+    }, 300);
   };
 
   const switchCamera = () => {
@@ -301,6 +344,53 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
             )}
 
             <div ref={videoRef} className="w-full h-full" />
+
+            {/* Scan Frame Overlay */}
+            {scannerReady && showScanFrame && (
+              <div className="absolute inset-0 pointer-events-none">
+                {/* Scanning Animation */}
+                {isScanning && (
+                  <>
+                    {/* Frame corners */}
+                    <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-80 h-64 border-4 border-green-500 rounded-2xl opacity-70">
+                      {/* Top-left corner */}
+                      <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-400 rounded-tl-lg"></div>
+                      {/* Top-right corner */}
+                      <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-400 rounded-tr-lg"></div>
+                      {/* Bottom-left corner */}
+                      <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-400 rounded-bl-lg"></div>
+                      {/* Bottom-right corner */}
+                      <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-400 rounded-br-lg"></div>
+                    </div>
+
+                    {/* Scanning line animation */}
+                    <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-80 h-64 flex items-center justify-center">
+                      <div className="absolute w-72 h-1 bg-gradient-to-r from-transparent via-green-500 to-transparent animate-pulse" 
+                           style={{ animation: 'slide 2s infinite' }}></div>
+                    </div>
+
+                    {/* Glow effect */}
+                    <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-80 h-64 border-4 border-green-400/30 rounded-2xl opacity-50 blur-sm"></div>
+                  </>
+                )}
+
+                {/* Status Display */}
+                {scanStatus && (
+                  <div className="absolute top-8 left-1/2 -translate-x-1/2 w-full px-6">
+                    <div className={`
+                      p-4 rounded-2xl text-white font-bold text-lg text-center
+                      ${scanStatus === 'searching' ? 'bg-blue-600/80 animate-pulse' : ''}
+                      ${scanStatus === 'found' ? 'bg-green-600/90' : ''}
+                      ${scanStatus === 'not-found' ? 'bg-red-600/90' : ''}
+                      ${scanStatus === 'duplicate' ? 'bg-yellow-600/90' : ''}
+                      ${scanStatus === 'error' ? 'bg-red-700/90' : ''}
+                    `}>
+                      {statusMessage}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Scanner Instructions and Last Scanned */}
@@ -333,6 +423,14 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
                 title={facingMode === 'environment' ? 'Switch to Front Camera' : 'Switch to Rear Camera'}
               >
                 <SwitchCamera className="w-6 h-6 text-white" />
+              </button>
+
+              <button 
+                onClick={() => setShowScanFrame(!showScanFrame)}
+                className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition"
+                title={showScanFrame ? 'Hide Frame' : 'Show Frame'}
+              >
+                <span className="text-white text-2xl">{showScanFrame ? '👁️' : '🚫'}</span>
               </button>
 
               <button 
