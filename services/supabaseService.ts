@@ -1171,8 +1171,8 @@ export const fetchStoreHealthData = async (storeId: string): Promise<StoreHealth
     // Get staff
     const { data: agents } = await supabase!.from('staff').select('*').eq('store_id', storeId).eq('is_active', true);
 
-    // Get inventory
-    const { data: inventory } = await supabase!.from('inventory').select('*').eq('store_id', storeId);
+    // Get inventory (only items with stock > 0)
+    const { data: inventory } = await supabase!.from('inventory').select('*').eq('store_id', storeId).gt('current_stock', 0);
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
