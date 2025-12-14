@@ -62,7 +62,7 @@ export const StoreHealthDashboard: React.FC<StoreHealthDashboardProps> = ({ onCl
   };
 
   const formatCurrency = (amount: number) => `KES ${amount.toLocaleString()}`;
-  const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('en-KE') : 'Never';
+  const formatDate = (date: Date | null) => date ? new Date(date).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi', year: 'numeric', month: 'short', day: 'numeric' }) : 'Never';
 
   if (loading) {
     return (

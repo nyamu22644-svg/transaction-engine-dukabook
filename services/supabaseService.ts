@@ -23,6 +23,8 @@ import {
 import { MOCK_INVENTORY, MOCK_STORES } from '../constants';
 import { supabase, isSupabaseEnabled } from './supabaseClient';
 import { getTemplatesByBusinessType, ItemTemplate } from '../data/itemTemplates';
+import { utcToZonedTime } from 'date-fns-tz';
+import { startOfDay, startOfMonth, differenceInCalendarDays } from 'date-fns';
 
 // Keep it simple: Supabase first, fall back to localStorage when offline/disabled
 const STORAGE_KEYS = {
@@ -1172,22 +1174,32 @@ export const fetchStoreHealthData = async (storeId: string): Promise<StoreHealth
     const { data: agents } = await supabase!.from('staff').select('*').eq('store_id', storeId).eq('is_active', true);
 
     // Get ALL inventory items (don't filter by stock - count all added items)
-    const { data: inventory } = await supabase!.from('inventory').select('*').eq('store_id', storeId);
+    const { data: inventory } = await supabase!.from('inventory_items').select('*').eq('store_id', storeId);
 
+    const timeZone = 'Africa/Nairobi';
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nowZoned = utcToZonedTime(now, timeZone);
+    const today = startOfDay(nowZoned);
+    const monthStart = startOfMonth(nowZoned);
 
     // Calculate metrics
     const totalRevenue = allSales.reduce((sum, s) => sum + (s.total_amount || 0), 0);
     const totalDebt = allSales.filter(s => s.payment_mode === 'DEBT' && !s.is_debt_settled).reduce((sum, s) => sum + (s.total_amount || 0), 0);
     
-    const todaySales = allSales.filter(s => new Date(s.created_at) >= today);
-    const monthSales = allSales.filter(s => new Date(s.created_at) >= monthStart);
+    const todaySales = allSales.filter(s => {
+      const saleZoned = utcToZonedTime(new Date(s.created_at), timeZone);
+      return saleZoned >= today;
+    });
+
+    const monthSales = allSales.filter(s => {
+      const saleZoned = utcToZonedTime(new Date(s.created_at), timeZone);
+      return saleZoned >= monthStart;
+    });
 
     const sortedSales = [...allSales].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     const lastSaleDate = sortedSales.length > 0 ? new Date(sortedSales[0].created_at) : null;
-    const daysSinceLastSale = lastSaleDate ? Math.floor((now.getTime() - lastSaleDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
+    const lastSaleZoned = lastSaleDate ? utcToZonedTime(lastSaleDate, timeZone) : null;
+    const daysSinceLastSale = lastSaleZoned ? differenceInCalendarDays(nowZoned, lastSaleZoned) : 999;
 
     // Low stock = items with stock but below reorder level
     const lowStockItems = (inventory || []).filter(i => i.current_stock > 0 && i.current_stock <= (i.reorder_level || 5));
@@ -1225,14 +1237,22 @@ export const fetchPlatformAnalytics = async (): Promise<PlatformAnalytics | null
     const { data: allSales } = await supabase!.from('sales').select('*');
     const sales = allSales || [];
 
+    const timeZone = 'Africa/Nairobi';
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nowZoned = utcToZonedTime(now, timeZone);
+    const today = startOfDay(nowZoned);
+    const monthStart = startOfMonth(nowZoned);
 
     // Calculate platform-wide metrics
     const totalRevenue = sales.reduce((sum, s) => sum + (s.total_amount || 0), 0);
-    const todaySales = sales.filter(s => new Date(s.created_at) >= today);
-    const monthSales = sales.filter(s => new Date(s.created_at) >= monthStart);
+    const todaySales = sales.filter(s => {
+      const saleZoned = utcToZonedTime(new Date(s.created_at), timeZone);
+      return saleZoned >= today;
+    });
+    const monthSales = sales.filter(s => {
+      const saleZoned = utcToZonedTime(new Date(s.created_at), timeZone);
+      return saleZoned >= monthStart;
+    });
     const totalDebt = sales.filter(s => s.payment_mode === 'DEBT' && !s.is_debt_settled).reduce((sum, s) => sum + (s.total_amount || 0), 0);
 
     // Get health data for each store
