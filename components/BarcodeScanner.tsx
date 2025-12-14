@@ -65,6 +65,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
       } catch (err) {
         console.error('Scanner initialization error:', err);
         setScanError('Camera not available. Using manual entry instead.');
+        playErrorSound(); // Play error sound when camera fails
         setTimeout(() => setManualMode(true), 2000);
       }
     };
@@ -83,8 +84,62 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
     };
   }, [manualMode]);
 
+  // Sound feedback using Web Audio API
+  const playSuccessSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Success: two high-pitched beeps
+      oscillator.frequency.value = 1000; // Hz
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.1);
+      
+      // Second beep
+      const osc2 = audioContext.createOscillator();
+      osc2.connect(gainNode);
+      osc2.frequency.value = 1200; // Hz
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime + 0.15);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
+      
+      osc2.start(audioContext.currentTime + 0.15);
+      osc2.stop(audioContext.currentTime + 0.25);
+    } catch (err) {
+      console.error('Sound error:', err);
+    }
+  };
+
+  const playErrorSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Error: low-pitched buzzer sound
+      oscillator.frequency.value = 400; // Hz (lower pitch)
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.2);
+    } catch (err) {
+      console.error('Sound error:', err);
+    }
+  };
+
   const handleBarcodeDetected = (barcode: string) => {
     setLastScanned(barcode);
+    playSuccessSound(); // Play success beep
     
     // Check if barcode exists in catalog
     const results = searchCatalog(barcode);
