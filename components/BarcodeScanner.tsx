@@ -17,6 +17,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
   const [scannerReady, setScannerReady] = useState(false);
   const [scanError, setScanError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment'); // rear or front camera
 
   // Initialize scanner when component mounts and camera mode is active
   useEffect(() => {
@@ -44,7 +45,9 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
           {
             fps: 10,
             qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0
+            aspectRatio: 1.0,
+            // @ts-ignore - facingMode is supported for device camera selection
+            facingMode: { ideal: facingMode } // Use selected camera (front or rear)
           },
           /* useBarCodeDetectorIfAvailable= */ true
         );
@@ -82,7 +85,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
         }
       }
     };
-  }, [manualMode]);
+  }, [manualMode, facingMode]);
 
   // Sound feedback using Web Audio API
   const playSuccessSound = () => {
@@ -152,6 +155,10 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
       setMatchedItem(null);
       onScan(barcode);
     }
+  };
+
+  const switchCamera = () => {
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -302,6 +309,14 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
             </div>
 
             <div className="flex items-center justify-center gap-6">
+              <button 
+                onClick={switchCamera}
+                className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition"
+                title={facingMode === 'environment' ? 'Switch to Front Camera' : 'Switch to Rear Camera'}
+              >
+                <SwitchCamera className="w-6 h-6 text-white" />
+              </button>
+
               <button 
                 onClick={() => setManualMode(true)}
                 className="w-16 h-16 bg-white rounded-full flex items-center justify-center hover:bg-slate-100 transition shadow-lg"
