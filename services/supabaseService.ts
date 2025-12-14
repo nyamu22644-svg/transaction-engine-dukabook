@@ -1167,7 +1167,7 @@ export const fetchStoreHealthData = async (storeId: string): Promise<StoreHealth
     if (!store) return null;
 
     // Get all sales for this store
-    const { data: sales } = await supabase!.from('sales').select('*').eq('store_id', storeId);
+    const { data: sales } = await supabase!.from('sales_records').select('*').eq('store_id', storeId);
     const allSales = sales || [];
 
     // Get staff
@@ -1234,7 +1234,7 @@ export const fetchPlatformAnalytics = async (): Promise<PlatformAnalytics | null
     if (!stores) return null;
 
     // Get ALL sales across platform
-    const { data: allSales } = await supabase!.from('sales').select('*');
+    const { data: allSales } = await supabase!.from('sales_records').select('*');
     const sales = allSales || [];
 
     const timeZone = 'Africa/Nairobi';
