@@ -276,6 +276,25 @@ export interface Agent {
   last_active: string;
 }
 
+// Shrinkage Debt - tracks inventory loss attributed to employees
+export interface ShrinkageDebt {
+  id: string;
+  store_id: string;
+  agent_id: string;
+  agent_name: string;
+  item_id: string;
+  item_name: string;
+  quantity_missing: number;
+  unit_price: number;
+  total_debt_amount: number;
+  audit_id: string; // References inventory audit/count
+  audit_date: string;
+  status: 'PENDING' | 'ACKNOWLEDGED' | 'RESOLVED' | 'DISPUTED'; // PENDING = waiting employee confirmation
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface AuditLog {
   id: string;
   store_id: string;
