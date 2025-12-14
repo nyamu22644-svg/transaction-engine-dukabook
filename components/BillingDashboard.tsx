@@ -4,7 +4,7 @@ import {
   AlertTriangle, CheckCircle, XCircle, CreditCard, Phone, Send,
   Calendar, Ban, PlayCircle, Receipt, ChevronRight, Zap, Percent,
   ArrowUpRight, ArrowDownRight, Bell, MessageSquare, Settings, Package, Edit3, Save,
-  Map, Shield, BarChart3, FileText, Smartphone, Wallet, Globe, Trash2
+  Map, Shield, BarChart3, FileText, Smartphone, Wallet, Globe, Trash2, Plus
 } from 'lucide-react';
 import {
   getBillingDashboardStats,
@@ -18,34 +18,20 @@ import {
   getMarketingConfig,
   updateMarketingConfig,
 } from '../services/billingService';
-import { StoreSubscription, StoreProfile, SubscriptionPlan, BillingDashboardStats, PaymentConfig, MarketingConfig } from '../types';
+import { getSubscriptionFeatures, createSubscriptionFeature, updateSubscriptionFeature, deleteSubscriptionFeature } from '../services/featureService';
+import { StoreSubscription, StoreProfile, SubscriptionPlan, BillingDashboardStats, PaymentConfig, MarketingConfig, SubscriptionFeature } from '../types';
 
 interface BillingDashboardProps {
   onClose: () => void;
 }
 
-// Feature options for plans
-const AVAILABLE_FEATURES = [
-  { id: 'sales', label: 'Record sales & expenses', icon: Receipt },
-  { id: 'inventory', label: 'Inventory tracking', icon: Package },
-  { id: 'reports', label: 'Daily/Weekly reports', icon: FileText },
-  { id: 'profit', label: 'Profit tracking & analytics', icon: BarChart3, premium: true },
-  { id: 'gps', label: 'GPS sales location map', icon: Map, premium: true },
-  { id: 'suppliers', label: 'Supplier management', icon: Wallet, premium: true },
-  { id: 'customers', label: 'Customer management', icon: Users, premium: true },
-  { id: 'madeni', label: 'Debt/Credit tracking (Madeni)', icon: CreditCard, premium: true },
-  { id: 'bulk_import', label: 'Bulk inventory import', icon: Package },
-  { id: 'barcode', label: 'Barcode scanning', icon: Smartphone },
-  { id: 'priority_support', label: 'Priority support', icon: Shield, premium: true },
-  { id: 'api_access', label: 'API access', icon: Globe, premium: true },
-];
-
 export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) => {
   const [stats, setStats] = useState<BillingDashboardStats | null>(null);
   const [subscriptions, setSubscriptions] = useState<(StoreSubscription & { store: StoreProfile })[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [features, setFeatures] = useState<SubscriptionFeature[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'subscriptions' | 'expiring' | 'plans' | 'settings' | 'marketing'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'subscriptions' | 'expiring' | 'plans' | 'settings' | 'marketing' | 'features'>('overview');
   const [processingReminders, setProcessingReminders] = useState(false);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   
@@ -58,6 +44,12 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
   const [editPlanFeatures, setEditPlanFeatures] = useState<string[]>([]);
   const [editPlanPopular, setEditPlanPopular] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
+
+  // Feature editing state
+  const [editingFeature, setEditingFeature] = useState<SubscriptionFeature | null>(null);
+  const [newFeature, setNewFeature] = useState({ name: '', description: '', is_premium: false });
+  const [addingFeature, setAddingFeature] = useState(false);
+  const [savingFeature, setSavingFeature] = useState(false);
 
   // Payment config
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
@@ -72,16 +64,18 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
 
   const loadData = async () => {
     setLoading(true);
-    const [statsData, subsData, plansData, configData, marketingData] = await Promise.all([
+    const [statsData, subsData, plansData, featuresData, configData, marketingData] = await Promise.all([
       getBillingDashboardStats(),
       getAllSubscriptions(),
       getSubscriptionPlans(),
+      getSubscriptionFeatures(),
       getPaymentConfig(),
       getMarketingConfig(),
     ]);
     setStats(statsData);
     setSubscriptions(subsData);
     setPlans(plansData);
+    setFeatures(featuresData);
     setPaymentConfig(configData);
     setMarketingConfig(marketingData);
     setLoading(false);
@@ -1332,24 +1326,23 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
               <div>
                 <label className="block text-sm text-slate-400 mb-3">Included Features</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {AVAILABLE_FEATURES.map(feature => (
+                  {features.map(feature => (
                     <label
                       key={feature.id}
                       className={`flex items-center gap-2 p-3 rounded-lg cursor-pointer transition ${
-                        editPlanFeatures.includes(feature.label)
+                        editPlanFeatures.includes(feature.name)
                           ? 'bg-green-500/20 border border-green-500/30'
                           : 'bg-slate-800 border border-slate-700 hover:border-slate-600'
                       }`}
                     >
                       <input
                         type="checkbox"
-                        checked={editPlanFeatures.includes(feature.label)}
-                        onChange={() => toggleFeature(feature.label)}
+                        checked={editPlanFeatures.includes(feature.name)}
+                        onChange={() => toggleFeature(feature.name)}
                         className="w-4 h-4 rounded"
                       />
-                      <feature.icon className={`w-4 h-4 ${feature.premium ? 'text-amber-500' : 'text-slate-400'}`} />
-                      <span className="text-sm text-white">{feature.label}</span>
-                      {feature.premium && <Crown className="w-3 h-3 text-amber-500" />}
+                      <span className="text-sm text-white">{feature.name}</span>
+                      {feature.is_premium && <Crown className="w-3 h-3 text-amber-500" />}
                     </label>
                   ))}
                 </div>
@@ -1359,9 +1352,9 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
               <div>
                 <label className="block text-sm text-slate-400 mb-2">Custom Features (one per line)</label>
                 <textarea
-                  value={editPlanFeatures.filter(f => !AVAILABLE_FEATURES.find(af => af.label === f)).join('\n')}
+                  value={editPlanFeatures.filter(f => !features.find(af => af.name === f)).join('\n')}
                   onChange={(e) => {
-                    const standardFeatures = editPlanFeatures.filter(f => AVAILABLE_FEATURES.find(af => af.label === f));
+                    const standardFeatures = editPlanFeatures.filter(f => features.find(af => af.name === f));
                     const customFeatures = e.target.value.split('\n').filter(f => f.trim());
                     setEditPlanFeatures([...standardFeatures, ...customFeatures]);
                   }}

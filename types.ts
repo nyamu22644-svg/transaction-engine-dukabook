@@ -309,6 +309,19 @@ export interface AuditLog {
   ip_address?: string;
 }
 
+// Subscription Features (Database-driven FEFO list)
+export interface SubscriptionFeature {
+  id: string;
+  name: string;                    // e.g., "Profit tracking & analytics"
+  icon?: string;                   // Icon name for UI (e.g., "BarChart3")
+  description?: string;
+  is_premium: boolean;             // If true, only PREMIUM plans get this
+  sort_order: number;              // Display order
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
 // Financial & Reporting
 export interface CashRegister {
   id: string;
