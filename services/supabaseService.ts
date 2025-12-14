@@ -1171,8 +1171,8 @@ export const fetchStoreHealthData = async (storeId: string): Promise<StoreHealth
     // Get staff
     const { data: agents } = await supabase!.from('staff').select('*').eq('store_id', storeId).eq('is_active', true);
 
-    // Get inventory (only items with stock > 0)
-    const { data: inventory } = await supabase!.from('inventory').select('*').eq('store_id', storeId).gt('current_stock', 0);
+    // Get ALL inventory items (don't filter by stock - count all added items)
+    const { data: inventory } = await supabase!.from('inventory').select('*').eq('store_id', storeId);
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1189,7 +1189,8 @@ export const fetchStoreHealthData = async (storeId: string): Promise<StoreHealth
     const lastSaleDate = sortedSales.length > 0 ? new Date(sortedSales[0].created_at) : null;
     const daysSinceLastSale = lastSaleDate ? Math.floor((now.getTime() - lastSaleDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
 
-    const lowStockItems = (inventory || []).filter(i => i.current_stock <= (i.reorder_level || 5));
+    // Low stock = items with stock but below reorder level
+    const lowStockItems = (inventory || []).filter(i => i.current_stock > 0 && i.current_stock <= (i.reorder_level || 5));
 
     return {
       store: store as StoreProfile,
@@ -1199,8 +1200,8 @@ export const fetchStoreHealthData = async (storeId: string): Promise<StoreHealth
       daysSinceLastSale,
       totalDebt,
       activeStaffCount: (agents || []).length,
-      inventoryCount: (inventory || []).length,
-      lowStockCount: lowStockItems.length,
+      inventoryCount: (inventory || []).length, // All items added to inventory
+      lowStockCount: lowStockItems.length, // Only items with stock but below reorder level
       todaySales: todaySales.length,
       todayRevenue: todaySales.reduce((sum, s) => sum + (s.total_amount || 0), 0),
       thisMonthRevenue: monthSales.reduce((sum, s) => sum + (s.total_amount || 0), 0),
