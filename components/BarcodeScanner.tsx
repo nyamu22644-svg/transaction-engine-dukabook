@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Camera, Flashlight, FlashlightOff, SwitchCamera, Keyboard, Search, AlertCircle, CheckCircle2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Camera, Keyboard, Search, AlertCircle, CheckCircle2, SwitchCamera } from 'lucide-react';
 import { searchCatalog, ItemTemplate } from '../data/itemTemplates';
-import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode';
+import Quagga from '@ericblade/quagga2';
 
 interface BarcodeScannerProps {
   onScan: (barcode: string, item?: ItemTemplate) => void;
@@ -9,7 +9,7 @@ interface BarcodeScannerProps {
 }
 
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const videoRef = useRef<HTMLDivElement>(null);
   const [manualMode, setManualMode] = useState(false);
   const [manualBarcode, setManualBarcode] = useState('');
   const [lastScanned, setLastScanned] = useState('');
@@ -17,58 +17,79 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
   const [scannerReady, setScannerReady] = useState(false);
   const [scanError, setScanError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment'); // rear or front camera
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
 
-  // Initialize scanner when component mounts and camera mode is active
+  // Initialize Quagga2 barcode scanner
   useEffect(() => {
     if (manualMode) {
-      if (scannerRef.current) {
-        try {
-          scannerRef.current.clear();
-        } catch (err) {
-          console.error('Error clearing scanner:', err);
-        }
-        scannerRef.current = null;
+      try {
+        Quagga.stop?.();
+      } catch (err) {
+        console.error('Error stopping Quagga:', err);
       }
       setScannerReady(false);
       return;
     }
 
-    // Initialize html5-qrcode scanner
     const initScanner = async () => {
       try {
         setScanError('');
         setIsScanning(false);
-        
-        const scanner = new Html5QrcodeScanner(
-          'qr-reader',
+
+        try {
+          Quagga.stop?.();
+        } catch (err) {
+          console.error('Error stopping previous instance:', err);
+        }
+
+        // Initialize Quagga2 for barcode scanning
+        await Quagga.init(
           {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-            // @ts-ignore - facingMode is supported for device camera selection
-            facingMode: { ideal: facingMode } // Use selected camera (front or rear)
-          },
-          /* useBarCodeDetectorIfAvailable= */ true
+            inputStream: {
+              type: 'LiveStream',
+              target: videoRef.current as HTMLElement,
+              constraints: {
+                facingMode: facingMode,
+                width: { min: 320, ideal: 1280, max: 1920 },
+                height: { min: 240, ideal: 720, max: 1440 }
+              }
+            },
+            decoder: {
+              readers: [
+                'code_128_reader',
+                'ean_reader',
+                'ean_8_reader',
+                'upc_reader',
+                'upc_e_reader',
+                'codabar_reader',
+                'code_39_reader',
+                'code_39_vin_reader'
+              ]
+            },
+            locator: {
+              halfSample: true,
+              patchSize: 'medium'
+            },
+            numOfWorkers: 4,
+            frequency: 10
+          } as any
         );
 
-        const onScanSuccess = (decodedText: string) => {
-          handleBarcodeDetected(decodedText);
-        };
-
-        const onScanError = (error: string) => {
-          // Silently continue scanning on error - don't show every frame's error
-          return;
-        };
-
-        scanner.render(onScanSuccess, onScanError);
-        scannerRef.current = scanner;
+        Quagga.start?.();
         setScannerReady(true);
         setIsScanning(true);
+
+        // Handle detection
+        Quagga.onDetected?.((result) => {
+          if (result && result.codeResult && result.codeResult.code) {
+            const detectedCode = result.codeResult.code;
+            handleBarcodeDetected(detectedCode);
+          }
+        });
       } catch (err) {
         console.error('Scanner initialization error:', err);
         setScanError('Camera not available. Using manual entry instead.');
-        playErrorSound(); // Play error sound when camera fails
+        playErrorSound();
         setTimeout(() => setManualMode(true), 2000);
       }
     };
@@ -76,13 +97,10 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
     initScanner();
 
     return () => {
-      if (scannerRef.current) {
-        try {
-          scannerRef.current.clear();
-          scannerRef.current = null;
-        } catch (err) {
-          console.error('Error cleaning up scanner:', err);
-        }
+      try {
+        Quagga.stop?.();
+      } catch (err) {
+        console.error('Error cleaning up Quagga:', err);
       }
     };
   }, [manualMode, facingMode]);
@@ -282,7 +300,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
               </div>
             )}
 
-            <div id="qr-reader" className="w-full h-full" />
+            <div ref={videoRef} className="w-full h-full" />
           </div>
 
           {/* Scanner Instructions and Last Scanned */}
