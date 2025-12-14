@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase } from './supabaseClient';
 import type { CashRegisterAudit, CashFraudPattern } from '../types';
 
 // Record a cash register reconciliation audit

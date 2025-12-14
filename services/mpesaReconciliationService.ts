@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase } from './supabaseClient';
 import type { MpesaTransaction, MpesaReconciliationLog, MpesaReconciliationStatus } from '../types';
 
 // Record an M-Pesa transaction

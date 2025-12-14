@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase } from './supabaseClient';
 import type { SupplierFraudFlag, SupplierQualityScore, SupplierFraudSummary } from '../types';
 
 // Flag a supplier fraud case

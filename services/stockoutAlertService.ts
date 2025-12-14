@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase } from './supabaseClient';
 import type { StockoutAlert, StockoutImpactSummary } from '../types';
 
 // Record a stockout alert

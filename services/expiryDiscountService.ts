@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase } from './supabaseClient';
 import type { ExpiryDiscountRule, InventoryExpiryStatus, ExpiryClearance } from '../types';
 import { differenceInCalendarDays } from 'date-fns';
 import { utcToZonedTime } from 'date-fns-tz';

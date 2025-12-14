@@ -1,4 +1,4 @@
-import { supabase } from '../index';
+import { supabase } from './supabaseClient';
 import { InventoryItem } from '../types';
 
 /**

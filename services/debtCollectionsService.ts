@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase } from './supabaseClient';
 import type { DebtCollection, DebtReminderLog, CustomerCreditCeiling, DebtCollectionsDashboard } from '../types';
 
 // Record a debt for a customer

@@ -870,8 +870,8 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
            )}
         </div>
 
-        {/* Warranty Management - Electronics & Phone Repair Only */}
-        {(store.business_type === 'Electronics' || store.business_type === 'Phone Repair') && (
+        {/* Warranty Management - Check if store has electronics-related features */}
+        {(store.business_type === 'retail' || store.business_type?.includes?.('electron')) && (
           <div className="md:col-span-1">
             <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-200 shadow-sm p-4 space-y-3">
               <h3 className="font-bold text-purple-900 flex items-center gap-2 border-b border-purple-200 pb-2">

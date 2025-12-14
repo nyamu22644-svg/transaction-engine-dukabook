@@ -139,16 +139,22 @@ export const SmartBarcodeScanner: React.FC<SmartBarcodeScannerProps> = ({ onScan
         setScannerReady(true);
         setIsScanning(true);
 
-        // Check for torch support
+        // Check for torch support - Note: Quagga2 doesn't provide direct mediaStream access
+        // Torch support varies by device and browser
         try {
-          const stream = Quagga.mediaStream?.getVideoTracks?.()?.[0];
-          if (stream?.getCapabilities?.()) {
-            const capabilities = stream.getCapabilities?.() as any;
-            if (capabilities?.torch) {
-              setTorchAvailable(true);
+          // Try to get stream from the video element
+          const video = document.querySelector('video') as HTMLVideoElement;
+          if (video?.srcObject && video.srcObject instanceof MediaStream) {
+            const stream = video.srcObject as MediaStream;
+            streamRef.current = stream;
+            const videoTrack = stream.getVideoTracks()[0];
+            if (videoTrack?.getCapabilities?.()) {
+              const capabilities = videoTrack.getCapabilities?.() as any;
+              if (capabilities?.torch) {
+                setTorchAvailable(true);
+              }
             }
           }
-          streamRef.current = Quagga.mediaStream;
         } catch (err) {
           console.log('Torch not available');
         }
@@ -377,10 +383,10 @@ export const SmartBarcodeScanner: React.FC<SmartBarcodeScannerProps> = ({ onScan
       if (!videoTrack) return;
 
       const constraints = {
-        advanced: [{ torch: !torchEnabled }]
+        advanced: [{ torch: !torchEnabled }] as any
       };
 
-      await videoTrack.applyConstraints(constraints);
+      await videoTrack.applyConstraints(constraints as any);
       setTorchEnabled(!torchEnabled);
       playSuccessSound();
     } catch (err) {

@@ -2,7 +2,7 @@
 // Service for managing shop-specific inventory
 // This is PRIVATE - each shop only sees their own prices and quantities
 
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from './supabaseClient';
 
 export interface ShopInventoryItem {
     id: string;
@@ -182,7 +182,7 @@ class ShopInventoryService {
     ): Promise<ShopInventoryItem | null> {
         return await this.updateItem(itemId, shopId, {
             quantity,
-            last_restocked_at: new Date().toISOString()
+            updated_at: new Date().toISOString()
         });
     }
 

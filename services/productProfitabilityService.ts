@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase } from './supabaseClient';
 import type { ProductProfitability, ProductPerformance, ProductProfitabilitySummary } from '../types';
 
 // Get product profitability for current month

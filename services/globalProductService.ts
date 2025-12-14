@@ -3,7 +3,7 @@
 // This is the "Master Brain" - shared across all shops
 // READ-ONLY for shops, READ-WRITE for system
 
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from './supabaseClient';
 
 export interface GlobalProduct {
     barcode: string;

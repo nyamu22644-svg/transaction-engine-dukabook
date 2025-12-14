@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase } from './supabaseClient';
 import type { TaxComplianceRecord, TaxExemptionRule, TaxPaymentSchedule, KraComplianceStatus } from '../types';
 
 // Create a tax compliance record

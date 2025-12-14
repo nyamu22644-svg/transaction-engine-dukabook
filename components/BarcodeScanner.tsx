@@ -18,7 +18,6 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
     Quagga.init(
       {
         inputStream: {
-          name: 'Live',
           type: 'LiveStream',
           target: scannerRef.current,
           constraints: {
@@ -45,7 +44,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
           ],
         },
         locate: true, // Try to find the barcode box before reading
-      },
+      } as any,
       (err) => {
         if (err) {
           console.error('Error starting Quagga:', err);

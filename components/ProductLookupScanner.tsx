@@ -72,12 +72,18 @@ export const ProductLookupScanner: React.FC<ProductLookupScannerProps> = ({
   // Populate form when product is found
   useEffect(() => {
     if (foundProduct) {
-      setFormData({
+      setFormData((prev) => ({
+        ...prev,
+        item_name: foundProduct.item_name || '',
+        buying_price: (foundProduct.buying_price || 0).toString(),
+        unit_price: (foundProduct.unit_price || 0).toString(),
+        current_stock: (foundProduct.current_stock || 0).toString(),
+        category: foundProduct.category || '',
         buyingPrice: foundProduct.buying_price || 0,
         sellingPrice: foundProduct.unit_price || 0,
         stock: foundProduct.current_stock || 0,
         notes: ''
-      });
+      }));
     }
   }, [foundProduct]);
 
@@ -88,7 +94,7 @@ export const ProductLookupScanner: React.FC<ProductLookupScannerProps> = ({
           facingMode: 'environment',
           width: { ideal: 1920 },
           height: { ideal: 1440 },
-          advanced: [{ torch: false }]
+          advanced: [{ focusMode: 'continuous' }] as any
         }
       });
 
@@ -146,12 +152,12 @@ export const ProductLookupScanner: React.FC<ProductLookupScannerProps> = ({
               'code_93_reader'
             ] as any,
             debug: {
-              showCanvas: false,
-              showPatches: false,
-              showFoundPatches: false,
-              showSkeleton: false,
-              showLabels: false,
-              showCenterpoint: false,
+              drawBoundingBox: false,
+              showFrequency: false,
+              drawScanline: false,
+              showPattern: false,
+              printReaderInfo: false
+            }
               lineWidth: 2
             }
           }
@@ -729,7 +735,7 @@ export const ProductLookupScanner: React.FC<ProductLookupScannerProps> = ({
         )}
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes pulse-glow {
           0%, 100% {
             box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
