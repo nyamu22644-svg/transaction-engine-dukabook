@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Loader2, Save, ShoppingCart, User, Smartphone, CreditCard, Banknote, Clock, CheckCircle2, Share2, Plus, RefreshCw, Copy, RotateCcw, MapPinOff, Settings, X, AlertOctagon, AlertTriangle, History, ArrowLeft, Calendar, Printer, TrendingDown, ArrowDownRight, ArrowUpRight, Package, ScanLine } from 'lucide-react';
 import { fetchInventory, recordSale, deleteSale, fetchDebtors, fetchRecentSales, recordExpense, addNewInventoryItem, fetchAgents } from '../services/supabaseService';
+import { createSerializedItem } from '../services/warrantyService';
 import { deductBreakoutUnits } from '../services/inventoryService';
 import { InventoryItem, PaymentMode, GeoLocationState, StoreProfile, SalesRecord, Agent } from '../types';
 import { DebtorsList } from './DebtorsList';
@@ -60,6 +61,7 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
   const [mpesaRef, setMpesaRef] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string>("");
   const [customerName, setCustomerName] = useState<string>("");
+  const [itemImeiSerial, setItemImeiSerial] = useState<string>("");
 
   // Form Fields - Expense
   const [expenseAmount, setExpenseAmount] = useState("");
@@ -322,6 +324,7 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
       setMpesaRef("");
       setCustomerPhone("");
       setCustomerName("");
+      setItemImeiSerial("");
       return;
     }
     
@@ -351,6 +354,21 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
         gps_longitude: geoState.lng!,
         gps_accuracy: geoState.accuracy || 0,
       });
+
+      // Create warranty record if IMEI/Serial is provided (Electronics & Phone Repair)
+      if (itemImeiSerial && (bizConfig.businessType === 'Electronics' || bizConfig.businessType === 'Phone Repair')) {
+        const warrantyDays = selectedItem?.warranty_days || 365; // Default 1 year
+        await createSerializedItem(
+          store.id,
+          saleId,
+          selectedItem?.item_name || 'Unknown Item',
+          itemImeiSerial,
+          warrantyDays,
+          customerPhone || undefined,
+          customerName || undefined,
+          `Sold by: ${collectedBy || 'Self'}`
+        );
+      }
 
       // BREAKING BULK: If this is a unit item (has parent_item_id), deduct from unit stock
       if (selectedItem?.parent_item_id) {
@@ -456,6 +474,7 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
     setMpesaRef("");
     setCustomerPhone("");
     setCustomerName("");
+    setItemImeiSerial("");
     setSelectedItemId("");
     setShowReceipt(false);
     setLastSaleData(null);
@@ -1254,6 +1273,23 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
                 />
               </div>
             </div>
+
+            {/* IMEI / Serial Number - For Electronics & Phone Repair */}
+            {selectedItem && (bizConfig.businessType === 'Electronics' || bizConfig.businessType === 'Phone Repair') && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  IMEI / Serial Number <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 354563654563654 or SN123456"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 font-mono placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={itemImeiSerial}
+                  onChange={(e) => setItemImeiSerial(e.target.value.toUpperCase())}
+                />
+                <p className="text-xs text-slate-500 mt-1">Tracked for warranty validation &amp; anti-fraud</p>
+              </div>
+            )}
 
             {/* Payment Mode */}
             <div>

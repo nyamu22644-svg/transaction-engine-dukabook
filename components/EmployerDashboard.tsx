@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { fetchInventory, fetchRecentSales, addNewInventoryItem, updateStockLevel, deleteSale, fetchDebtors, fetchAuditLogs, performCashReconciliation, fetchExpenses, bulkAddInventoryItems, fetchAgents, addStaffMember, deleteStaffMember } from '../services/supabaseService';
 import { InventoryItem, SalesRecord, PaymentMode, StoreProfile, AuditLog, ExpenseRecord, Agent, EffectiveTier } from '../types';
-import { TrendingUp, AlertTriangle, Map, Banknote, Smartphone, Clock, Plus, PackagePlus, RefreshCcw, BarChart3, CreditCard, Share2, Calendar, Filter, AlertCircle, RotateCcw, AlertOctagon, Crown, FileText, ClipboardCheck, Wallet, ChevronDown, ChevronUp, History, Send, Download, Info, TrendingDown, Lock, FileSpreadsheet, Package, ScanLine, Users, UserPlus, Trash2, X, Truck, Bell, Sparkles } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Map, Banknote, Smartphone, Clock, Plus, PackagePlus, RefreshCcw, BarChart3, CreditCard, Share2, Calendar, Filter, AlertCircle, RotateCcw, AlertOctagon, Crown, FileText, ClipboardCheck, Wallet, ChevronDown, ChevronUp, History, Send, Download, Info, TrendingDown, Lock, FileSpreadsheet, Package, ScanLine, Users, UserPlus, Trash2, X, Truck, Bell, Sparkles, Search } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { DebtorsList } from './DebtorsList';
 import { PremiumLock } from './ui/PremiumLock';
@@ -16,6 +16,8 @@ import { BarcodeScanner } from './BarcodeScanner';
 import { SupplierManager } from './SupplierManager';
 import { CustomerManager } from './CustomerManager';
 import { SalesLocationMap } from './SalesLocationMap';
+import { WarrantyLookup } from './WarrantyLookup';
+import { WarrantyDashboard } from './WarrantyDashboard';
 import { SubscriptionPayment } from './SubscriptionPayment';
 import { 
   PremiumFloatingBadge, 
@@ -80,6 +82,10 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
 
   // Map State
   const [showSalesMap, setShowSalesMap] = useState(false);
+
+  // Warranty Management State
+  const [showWarrantyLookup, setShowWarrantyLookup] = useState(false);
+  const [showWarrantyDashboard, setShowWarrantyDashboard] = useState(false);
 
   // Premium Nudge State
   const [isTrialActive, setIsTrialActive] = useState(false);
@@ -864,6 +870,32 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
            )}
         </div>
 
+        {/* Warranty Management - Electronics & Phone Repair Only */}
+        {(store.business_type === 'Electronics' || store.business_type === 'Phone Repair') && (
+          <div className="md:col-span-1">
+            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-200 shadow-sm p-4 space-y-3">
+              <h3 className="font-bold text-purple-900 flex items-center gap-2 border-b border-purple-200 pb-2">
+                <Lock className="w-4 h-4" />
+                Warranty Management
+              </h3>
+              <button
+                onClick={() => setShowWarrantyLookup(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
+              >
+                <Search className="w-4 h-4" />
+                Search Warranty
+              </button>
+              <button
+                onClick={() => setShowWarrantyDashboard(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+              >
+                <BarChart3 className="w-4 h-4" />
+                Warranty Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Business Management: Suppliers & Customers */}
         <div className="md:col-span-1">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
@@ -1242,6 +1274,34 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
           sales={sales}
           onClose={() => setShowSalesMap(false)}
         />
+      )}
+
+      {/* Warranty Lookup Modal */}
+      {showWarrantyLookup && (
+        <WarrantyLookup 
+          store={store}
+          onClose={() => setShowWarrantyLookup(false)}
+        />
+      )}
+
+      {/* Warranty Dashboard Modal */}
+      {showWarrantyDashboard && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 overflow-y-auto">
+          <div className="min-h-screen p-4 md:p-6">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl md:text-3xl font-bold text-white">Warranty Management</h2>
+                <button 
+                  onClick={() => setShowWarrantyDashboard(false)}
+                  className="p-2 bg-red-600/20 hover:bg-red-600/30 rounded-lg text-red-400 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <WarrantyDashboard store={store} />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Subscription Payment Modal */}

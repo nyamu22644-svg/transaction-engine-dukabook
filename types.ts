@@ -603,3 +603,438 @@ export interface MarketingConfig {
   updated_at: string;
 }
 
+// ============================================================================
+// CASH RECONCILIATION & FRAUD DETECTION
+// ============================================================================
+
+export interface CashRegisterAudit {
+  id: string;
+  store_id: string;
+  register_date: string;
+  opening_balance: number;
+  expected_closing: number;
+  actual_closing: number;
+  variance_amount: number;
+  variance_percentage: number;
+  is_fraud_suspect: boolean;
+  fraud_category: 'OVERAGE' | 'SHORTAGE' | 'NORMAL';
+  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  reconciled_by?: string;
+  reconciled_at?: string;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CashFraudPattern {
+  store_id: string;
+  variance_count_30d: number;
+  avg_variance_percent: number;
+  fraud_suspect_count: number;
+  total_variance_30d: number;
+  risk_level: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
+}
+
+// ============================================================================
+// EXPIRY DISCOUNT MANAGEMENT
+// ============================================================================
+
+export interface ExpiryDiscountRule {
+  id: string;
+  store_id: string;
+  days_before_expiry: number;
+  suggested_discount_percent: number;
+  auto_apply: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface InventoryExpiryStatus {
+  id: string;
+  store_id: string;
+  inventory_item_id: string;
+  item_name: string;
+  current_stock: number;
+  expiry_date?: string;
+  days_until_expiry: number;
+  expiry_status: 'EXPIRED' | 'CRITICAL' | 'URGENT' | 'CAUTION' | 'OK';
+  suggested_discount_percent: number;
+  estimated_daily_sales: number;
+  estimated_loss_if_not_cleared: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ExpiryClearance {
+  id: string;
+  store_id: string;
+  inventory_item_id: string;
+  item_name: string;
+  quantity_cleared: number;
+  original_price: number;
+  clearance_price: number;
+  discount_percent: number;
+  cleared_via: 'DISCOUNTED_SALE' | 'DONATION' | 'DISPOSED';
+  sale_id?: string;
+  cleared_by: string;
+  cleared_at: string;
+  created_at: string;
+}
+
+// ============================================================================
+// DEBT COLLECTIONS & CREDIT MANAGEMENT
+// ============================================================================
+
+export interface DebtCollection {
+  id: string;
+  store_id: string;
+  customer_id?: string;
+  customer_name: string;
+  customer_phone?: string;
+  original_amount: number;
+  remaining_amount: number;
+  due_date?: string;
+  days_overdue: number;
+  aging_bucket: '1-30' | '31-60' | '61-90' | '90+';
+  status: 'ACTIVE' | 'OVERDUE' | 'SUSPENDED' | 'PARTIALLY_PAID' | 'COLLECTED' | 'WRITTEN_OFF';
+  last_reminder_date?: string;
+  reminder_count: number;
+  next_reminder_date?: string;
+  is_credit_ceiling_breach: boolean;
+  collection_agent_assigned?: string;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface DebtReminderLog {
+  id: string;
+  store_id: string;
+  debt_id: string;
+  customer_name: string;
+  customer_phone?: string;
+  remaining_amount: number;
+  days_overdue: number;
+  reminder_type: 'DUE_IN_7' | 'OVERDUE_7' | 'OVERDUE_14' | 'OVERDUE_30' | 'CRITICAL';
+  message_template?: string;
+  message_sent?: string;
+  sms_sent: boolean;
+  sms_status: 'PENDING' | 'SENT' | 'FAILED';
+  sms_error?: string;
+  sent_at?: string;
+  created_at: string;
+}
+
+export interface CustomerCreditCeiling {
+  id: string;
+  store_id: string;
+  customer_id: string;
+  credit_limit: number;
+  current_debt: number;
+  available_credit: number;
+  block_sales_on_ceiling_breach: boolean;
+  suspension_days_overdue: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface DebtCollectionsDashboard {
+  store_id: string;
+  total_active_debts: number;
+  total_outstanding: number;
+  debt_1_30_days: number;
+  debt_31_60_days: number;
+  debt_61_90_days: number;
+  debt_90_plus_days: number;
+  ceiling_breaches: number;
+  unique_debtors: number;
+  avg_days_overdue: number;
+}
+
+// ============================================================================
+// PRODUCT PROFITABILITY TRACKING
+// ============================================================================
+
+export interface ProductProfitability {
+  id: string;
+  store_id: string;
+  inventory_item_id: string;
+  item_name: string;
+  current_stock: number;
+  cost_price: number;
+  selling_price: number;
+  profit_per_unit: number;
+  profit_margin_percent: number;
+  period_month: number;
+  period_year: number;
+  units_sold: number;
+  total_revenue: number;
+  total_cost: number;
+  total_profit: number;
+  profit_percent_of_store: number;
+  profit_rank: number;
+  sales_rank: number;
+  profit_change_percent: number;
+  sales_velocity: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ProductPerformance {
+  id: string;
+  store_id: string;
+  top_profit_product_id?: string;
+  top_profit_amount?: number;
+  top_profit_margin_percent?: number;
+  bottom_profit_product_id?: string;
+  bottom_profit_amount?: number;
+  bottom_profit_margin_percent?: number;
+  high_velocity_product_id?: string;
+  high_velocity_units_per_day?: number;
+  dead_stock_product_id?: string;
+  days_without_sale?: number;
+  analysis_period_start: string;
+  analysis_period_end: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ProductProfitabilitySummary {
+  store_id: string;
+  total_products_tracked: number;
+  total_store_profit: number;
+  avg_margin_percent: number;
+  highest_profit_product: number;
+  lowest_profit_product: number;
+  loss_making_products: number;
+  low_margin_products: number;
+}
+
+// ============================================================================
+// INVENTORY STOCKOUT ALERTS
+// ============================================================================
+
+export interface StockoutAlert {
+  id: string;
+  store_id: string;
+  inventory_item_id: string;
+  item_name: string;
+  stockout_date: string;
+  days_out_of_stock: number;
+  is_resolved: boolean;
+  resolved_date?: string;
+  avg_daily_sales_units: number;
+  estimated_lost_units: number;
+  estimated_lost_revenue: number;
+  supplier_id?: string;
+  suggested_reorder_qty: number;
+  reorder_po_created: boolean;
+  po_id?: string;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface StockoutImpactSummary {
+  store_id: string;
+  total_stockouts: number;
+  resolved_stockouts: number;
+  ongoing_stockouts: number;
+  total_days_stockout: number;
+  total_lost_revenue: number;
+  avg_loss_per_stockout: number;
+  po_created_count: number;
+}
+
+// ============================================================================
+// SUPPLIER FRAUD DETECTION
+// ============================================================================
+
+export interface SupplierFraudFlag {
+  id: string;
+  store_id: string;
+  supplier_id: string;
+  purchase_order_id?: string;
+  grn_id?: string;
+  supplier_invoice_id?: string;
+  fraud_type: 'QUANTITY_MISMATCH' | 'PRICE_OVERCHARGE' | 'QUALITY_ISSUE' | 'DELIVERY_LATE' | 'INVOICE_MISMATCH';
+  po_quantity: number;
+  grn_quantity_received: number;
+  grn_quantity_rejected: number;
+  quantity_variance: number;
+  variance_percent: number;
+  po_unit_price: number;
+  invoice_unit_price: number;
+  price_variance: number;
+  total_overcharge: number;
+  po_expected_date?: string;
+  grn_actual_date?: string;
+  days_late: number;
+  rejection_reason?: string;
+  quality_score: number;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  is_resolved: boolean;
+  resolution_notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface SupplierQualityScore {
+  id: string;
+  store_id: string;
+  supplier_id: string;
+  total_orders: number;
+  on_time_deliveries: number;
+  quality_accepted_percent: number;
+  price_accuracy_percent: number;
+  overall_score: number;
+  reliability_score: number;
+  quality_score: number;
+  pricing_score: number;
+  is_blacklisted: boolean;
+  blacklist_reason?: string;
+  last_evaluated: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface SupplierFraudSummary {
+  store_id: string;
+  supplier_id: string;
+  fraud_flags_count: number;
+  quantity_mismatches: number;
+  price_overcharges: number;
+  quality_issues: number;
+  late_deliveries: number;
+  total_overcharge_amount: number;
+  avg_variance_percent: number;
+  high_severity_count: number;
+}
+
+// ============================================================================
+// M-PESA RECONCILIATION
+// ============================================================================
+
+export interface MpesaTransaction {
+  id: string;
+  store_id: string;
+  mpesa_ref: string;
+  phone_number: string;
+  amount: number;
+  transaction_type: 'DEPOSIT' | 'WITHDRAWAL' | 'PAYMENT' | 'SUBSCRIPTION';
+  mpesa_timestamp: string;
+  received_at: string;
+  is_reconciled: boolean;
+  reconciled_to_sale_id?: string;
+  reconciled_to_payment_id?: string;
+  matched_sale_amount?: number;
+  amount_variance?: number;
+  is_variance_flagged: boolean;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface MpesaReconciliationLog {
+  id: string;
+  store_id: string;
+  period_start: string;
+  period_end: string;
+  reconciliation_date: string;
+  total_mpesa_deposits: number;
+  total_matched_sales: number;
+  total_unmatched: number;
+  unmatched_count: number;
+  variance_count: number;
+  total_variance_amount: number;
+  status: 'PENDING' | 'IN_PROGRESS' | 'RECONCILED' | 'ISSUES_FOUND';
+  notes?: string;
+  reconciled_by?: string;
+  created_at: string;
+}
+
+export interface MpesaReconciliationStatus {
+  store_id: string;
+  total_transactions: number;
+  reconciled_count: number;
+  unmatched_count: number;
+  total_amount: number;
+  reconciled_amount: number;
+  unmatched_amount: number;
+  total_variance: number;
+  reconciliation_percent: number;
+}
+
+// ============================================================================
+// KRA / iDEAL TAX COMPLIANCE
+// ============================================================================
+
+export interface TaxComplianceRecord {
+  id: string;
+  store_id: string;
+  tax_period_start: string;
+  tax_period_end: string;
+  period_type: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+  gross_sales: number;
+  exempt_sales: number;
+  taxable_sales: number;
+  tax_rate: number;
+  tax_amount: number;
+  tax_paid_amount: number;
+  tax_balance: number;
+  ideal_filing_status: 'DRAFT' | 'READY' | 'FILED' | 'CONFIRMED';
+  ideal_filing_date?: string;
+  ideal_confirmation_date?: string;
+  ideal_reference_number?: string;
+  kra_status: 'PENDING' | 'SUBMITTED' | 'VERIFIED' | 'ISSUE';
+  kra_reference?: string;
+  kra_issue_notes?: string;
+  prepared_by?: string;
+  approved_by?: string;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface TaxExemptionRule {
+  id: string;
+  store_id: string;
+  category_name: string;
+  category_code: string;
+  is_exempt: boolean;
+  tax_rate: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface TaxPaymentSchedule {
+  id: string;
+  store_id: string;
+  payment_due_date: string;
+  period_type: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+  amount_due: number;
+  amount_paid: number;
+  is_paid: boolean;
+  payment_date?: string;
+  payment_method: 'BANK_TRANSFER' | 'MPESA';
+  payment_reference?: string;
+  days_until_due: number;
+  is_overdue: boolean;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface KraComplianceStatus {
+  store_id: string;
+  total_periods_filed: number;
+  ideal_filed_count: number;
+  kra_verified_count: number;
+  kra_issue_count: number;
+  total_tax_calculated: number;
+  total_tax_paid: number;
+  outstanding_tax: number;
+  avg_taxable_sales: number;
+}
+

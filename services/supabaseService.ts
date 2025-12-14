@@ -18,6 +18,7 @@ import {
   DailySummary,
   MonthlySummary,
   TaxRecord,
+  ShrinkageDebt,
   InventoryBatch,
 } from '../types';
 import { MOCK_INVENTORY, MOCK_STORES } from '../constants';
@@ -1330,3 +1331,75 @@ export const activateStore = async (storeId: string): Promise<boolean> => {
 // -----------------------------------------------------------------------------
 // Simple CSV/PDF export helpers can be implemented client-side using existing data.
 // -----------------------------------------------------------------------------
+// ============================================================================
+// SHRINKAGE DEBT MANAGEMENT (KES 3 Billion Loss Crisis)
+// ============================================================================
+
+export const recordShrinkageDebt = async (debt: Omit<ShrinkageDebt, 'id' | 'created_at'>): Promise<string | null> => {
+  if (!isSupabaseEnabled) return null;
+  try {
+    const { data, error } = await supabase!
+      .from('shrinkage_debts')
+      .insert(debt)
+      .select('id')
+      .single();
+
+    if (!error && data) {
+      const { data: agent } = await supabase!.from('agents').select('total_shrinkage_debt').eq('id', debt.agent_id).single();
+      if (agent) {
+        await supabase!
+          .from('agents')
+          .update({ total_shrinkage_debt: (agent.total_shrinkage_debt || 0) + debt.total_debt_amount })
+          .eq('id', debt.agent_id);
+      }
+      logLocalAction(debt.store_id, 'STOCK_UPDATE', `Shrinkage debt: ${debt.agent_name} - ${debt.item_name} (KES ${debt.total_debt_amount})`);
+      return data.id;
+    }
+    return null;
+  } catch (err) {
+    console.error('Error recording shrinkage debt:', err);
+    return null;
+  }
+};
+
+export const getShrinkageDebts = async (storeId: string, agentId?: string): Promise<ShrinkageDebt[]> => {
+  if (!isSupabaseEnabled) return [];
+  try {
+    let query = supabase!.from('shrinkage_debts').select('*').eq('store_id', storeId);
+    if (agentId) query = query.eq('agent_id', agentId);
+    const { data } = await query.order('created_at', { ascending: false });
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching shrinkage debts:', err);
+    return [];
+  }
+};
+
+export const updateShrinkageDebtStatus = async (debtId: string, status: ShrinkageDebt['status'], notes?: string): Promise<boolean> => {
+  if (!isSupabaseEnabled) return false;
+  try {
+    const { error } = await supabase!
+      .from('shrinkage_debts')
+      .update({ status, notes, updated_at: new Date().toISOString() })
+      .eq('id', debtId);
+    return !error;
+  } catch (err) {
+    console.error('Error updating shrinkage debt:', err);
+    return false;
+  }
+};
+
+export const getAgentShrinkageSummary = async (agentId: string): Promise<any> => {
+  if (!isSupabaseEnabled) return null;
+  try {
+    const { data } = await supabase!
+      .from('agent_shrinkage_summary')
+      .select('*')
+      .eq('agent_id', agentId)
+      .single();
+    return data;
+  } catch (err) {
+    console.error('Error fetching agent shrinkage summary:', err);
+    return null;
+  }
+};
