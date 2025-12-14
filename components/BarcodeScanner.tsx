@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Camera, Keyboard, Search, AlertCircle, CheckCircle2, SwitchCamera } from 'lucide-react';
+import { X, Camera, Keyboard, Search, AlertCircle, CheckCircle2, SwitchCamera, Lightbulb } from 'lucide-react';
 import { searchCatalog, ItemTemplate } from '../data/itemTemplates';
 import Quagga from '@ericblade/quagga2';
 
@@ -12,6 +12,7 @@ type ScanStatus = 'searching' | 'found' | 'not-found' | 'duplicate' | 'error' | 
 
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   const videoRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [manualMode, setManualMode] = useState(false);
   const [manualBarcode, setManualBarcode] = useState('');
   const [lastScanned, setLastScanned] = useState('');
@@ -24,6 +25,8 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
   const [statusMessage, setStatusMessage] = useState('');
   const [detectedBarcodes, setDetectedBarcodes] = useState<Set<string>>(new Set());
   const [showScanFrame, setShowScanFrame] = useState(true);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+  const [torchAvailable, setTorchAvailable] = useState(false);
 
   // Initialize Quagga2 barcode scanner
   useEffect(() => {
@@ -48,7 +51,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
           console.error('Error stopping previous instance:', err);
         }
 
-        // Initialize Quagga2 for barcode scanning
+        // Initialize Quagga2 for barcode scanning with optimized settings
         await Quagga.init(
           {
             inputStream: {
@@ -56,8 +59,15 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
               target: videoRef.current as HTMLElement,
               constraints: {
                 facingMode: facingMode,
-                width: { min: 320, ideal: 1280, max: 1920 },
-                height: { min: 240, ideal: 720, max: 1440 }
+                width: { min: 320, ideal: 1920, max: 1920 },
+                height: { min: 240, ideal: 1440, max: 1440 },
+                aspectRatio: { ideal: 16/9 }
+              },
+              area: {
+                top: '20%',
+                right: '0%',
+                left: '0%',
+                bottom: '20%'
               }
             },
             decoder: {
@@ -69,15 +79,25 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
                 'upc_e_reader',
                 'codabar_reader',
                 'code_39_reader',
-                'code_39_vin_reader'
-              ]
+                'code_39_vin_reader',
+                'code_93_reader'
+              ],
+              debug: {
+                showCanvas: false,
+                showPatternOrigin: false,
+                showFrequency: false,
+                drawBoundingBox: false,
+                drawScanline: false
+              }
             },
             locator: {
               halfSample: true,
-              patchSize: 'medium'
+              patchSize: 'large',
+              showCanvas: false
             },
-            numOfWorkers: 4,
-            frequency: 10
+            numOfWorkers: navigator.hardwareConcurrency || 4,
+            frequency: 30,
+            debug: false
           } as any
         );
 
@@ -85,11 +105,27 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
         setScannerReady(true);
         setIsScanning(true);
 
-        // Handle detection
+        // Check for torch/flashlight support
+        try {
+          const stream = Quagga.mediaStream?.getVideoTracks?.()?.[0];
+          if (stream?.getCapabilities?.()) {
+            const capabilities = stream.getCapabilities?.() as any;
+            if (capabilities?.torch) {
+              setTorchAvailable(true);
+            }
+          }
+          streamRef.current = Quagga.mediaStream;
+        } catch (err) {
+          console.log('Torch not available');
+        }
+
+        // Handle detection with better processing
         Quagga.onDetected?.((result) => {
           if (result && result.codeResult && result.codeResult.code) {
-            const detectedCode = result.codeResult.code;
-            handleBarcodeDetected(detectedCode);
+            const detectedCode = result.codeResult.code.trim();
+            if (detectedCode && detectedCode.length > 0) {
+              handleBarcodeDetected(detectedCode);
+            }
           }
         });
       } catch (err) {
@@ -220,6 +256,27 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
 
   const switchCamera = () => {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+  };
+
+  const toggleTorch = async () => {
+    try {
+      if (!streamRef.current) return;
+      
+      const videoTrack = streamRef.current.getVideoTracks()[0];
+      if (!videoTrack) return;
+
+      const settings = videoTrack.getSettings?.() as any;
+      const constraints = {
+        advanced: [{ torch: !torchEnabled }]
+      };
+
+      await videoTrack.applyConstraints(constraints);
+      setTorchEnabled(!torchEnabled);
+      playSuccessSound();
+    } catch (err) {
+      console.error('Error toggling torch:', err);
+      setStatusMessage('💡 Flashlight not available on this device');
+    }
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -424,6 +481,18 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
               >
                 <SwitchCamera className="w-6 h-6 text-white" />
               </button>
+
+              {torchAvailable && (
+                <button 
+                  onClick={toggleTorch}
+                  className={`w-14 h-14 rounded-full flex items-center justify-center transition ${
+                    torchEnabled ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-white/20 hover:bg-white/30'
+                  }`}
+                  title="Toggle Flashlight"
+                >
+                  <Lightbulb className={`w-6 h-6 ${torchEnabled ? 'text-black' : 'text-white'}`} />
+                </button>
+              )}
 
               <button 
                 onClick={() => setShowScanFrame(!showScanFrame)}

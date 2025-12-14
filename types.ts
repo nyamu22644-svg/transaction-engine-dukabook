@@ -1038,3 +1038,80 @@ export interface KraComplianceStatus {
   avg_taxable_sales: number;
 }
 
+// ============================================================================
+// GLOBAL PRODUCTS CATALOG (Network Effect - Shared Database)
+// ============================================================================
+
+export interface GlobalProduct {
+  barcode: string; // Primary key - e.g., "4800016000115"
+  generic_name: string; // e.g., "Simba Cement 50kg"
+  category: string; // e.g., "Building Materials"
+  image_url?: string; // Photo of the product/packaging
+  created_by: string; // User ID who first added this
+  contribution_count: number; // How many shops confirmed/used this product
+  created_at: string;
+}
+
+export interface GlobalProductSearchResult {
+  found: boolean;
+  product?: GlobalProduct;
+  isNewBarcode: boolean;
+}
+
+// ============================================================================
+// SHOP INVENTORY (Private Per-Shop Inventory with Prices)
+// ============================================================================
+
+export interface ShopInventoryItem {
+  id: string;
+  shop_id: string;
+  barcode: string; // Link to global_products
+  generic_name: string; // From global_products
+  category: string; // From global_products
+  image_url?: string; // From global_products
+  quantity: number; // Private - this shop's stock
+  selling_price: number; // Private - this shop's selling price
+  buying_price?: number; // Private - cost for profitability calculation
+  custom_alias?: string; // Optional: User's internal name (e.g., "Simba Mfuko")
+  last_restocked_at?: string;
+  margin_percent?: number; // Calculated: (selling_price - buying_price) / buying_price * 100
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShopInventoryStats {
+  total_items: number;
+  total_value: number; // quantity * selling_price
+  total_cost: number; // quantity * buying_price
+  low_stock_count: number;
+  avg_margin: number;
+}
+
+// ============================================================================
+// NETWORK EFFECT DATA (For Future Market Insights)
+// ============================================================================
+
+export interface PriceInsight {
+  barcode: string;
+  product_name: string;
+  category: string;
+  your_price: number;
+  market_average_price: number;
+  market_min_price: number;
+  market_max_price: number;
+  price_difference_percent: number; // Positive = you're expensive
+  shops_in_market: number;
+  region?: string;
+}
+
+export interface ProductMarketTrend {
+  barcode: string;
+  product_name: string;
+  category: string;
+  shops_selling: number; // How many shops in the network sell this
+  avg_selling_price: number;
+  price_trend: 'UP' | 'DOWN' | 'STABLE';
+  month_over_month_change: number;
+  total_contribution_count: number;
+}
+
