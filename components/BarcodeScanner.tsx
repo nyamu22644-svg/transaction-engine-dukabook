@@ -16,38 +16,17 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
   useEffect(() => {
     if (!containerRef.current) return;
 
-    console.log('🎥 BarcodeScanner: Requesting camera permission...');
+    console.log('🎥 BarcodeScanner: Initializing barcode scanner...');
 
-    // Request camera permission first
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' } })
-      .then((stream) => {
-        console.log('✅ Camera permission granted');
-        // Stop the test stream, let Quagga handle the actual stream
-        stream.getTracks().forEach(track => track.stop());
-        initializeQuagga();
-      })
-      .catch((err: any) => {
-        console.error('❌ Camera permission error:', err);
-        let friendlyError = 'Camera failed: ';
-        
-        if (err.name === 'NotAllowedError') {
-          friendlyError += 'Permission denied. Grant camera access in browser settings.';
-        } else if (err.name === 'NotFoundError') {
-          friendlyError += 'No camera found on this device.';
-        } else if (err.name === 'NotReadableError') {
-          friendlyError += 'Camera is in use by another app.';
-        } else {
-          friendlyError += err.message || 'Unknown error';
-        }
-        
-        setError(friendlyError);
-      });
+    // Small delay to ensure DOM is fully ready
+    const timer = setTimeout(() => {
+      initializeQuagga();
+    }, 100);
 
     const initializeQuagga = () => {
       if (!containerRef.current) return;
 
-      console.log('🚀 Initializing Quagga2 barcode detector...');
+      console.log('🚀 Starting Quagga2 initialization...');
 
       Quagga.init(
         {
@@ -65,7 +44,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
             patchSize: 'medium',
             halfSample: true
           },
-          numOfWorkers: 4,
+          numOfWorkers: navigator.hardwareConcurrency || 4,
           decoder: {
             readers: [
               'ean_reader',
@@ -78,8 +57,8 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
         } as any,
         (err) => {
           if (err) {
-            console.error('❌ Quagga initialization error:', err);
-            setError('Scanner init failed: ' + (err.message || 'Unknown error'));
+            console.error('❌ Quagga init error:', err);
+            setError('Camera setup failed. Check permissions and try again.');
             return;
           }
 
@@ -87,7 +66,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
           try {
             Quagga.start();
             setInitialized(true);
-            console.log('✅ Camera stream started - ready to scan');
+            console.log('✅ Camera stream started - scanning ready');
           } catch (startErr) {
             console.error('❌ Quagga start error:', startErr);
             setError('Failed to start camera stream');
@@ -108,6 +87,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
     };
 
     return () => {
+      clearTimeout(timer);
       try {
         Quagga.stop();
       } catch (err) {
