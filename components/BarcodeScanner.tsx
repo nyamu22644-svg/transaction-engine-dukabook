@@ -1,189 +1,241 @@
 import React, { useEffect, useRef, useState } from 'react';
-import Quagga from '@ericblade/quagga2';
-import { X, AlertCircle } from 'lucide-react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { X, AlertCircle, Flashlight, Camera } from 'lucide-react';
 
 interface BarcodeScannerProps {
   onDetected: (code: string) => void;
   onClose: () => void;
 }
 
+/**
+ * Pro Barcode Scanner Component using Html5Qrcode (Pro Class)
+ * 
+ * Supports:
+ * - EAN-13 (standard supermarket barcodes)
+ * - EAN-8 (small packages)
+ * - CODE-128 (logistics/warehouse)
+ * - UPC-A (US products)
+ * - QR Codes (backup)
+ * 
+ * Features:
+ * - Full control over camera stream (torch support)
+ * - Explicit Start/Stop for battery efficiency
+ * - React StrictMode safe with proper cleanup
+ * - Mobile optimized for Kenya retail
+ */
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onClose }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   const [error, setError] = useState<string>('');
   const [scanned, setScanned] = useState<string>('');
-  const [initialized, setInitialized] = useState(false);
 
+  // Barcode formats configuration
+  const formatsToSupport = [
+    Html5QrcodeSupportedFormats.EAN_13,    // Standard Kenya Supermarket
+    Html5QrcodeSupportedFormats.EAN_8,     // Small packages
+    Html5QrcodeSupportedFormats.CODE_128,  // Logistics/warehouse codes
+    Html5QrcodeSupportedFormats.UPC_A,     // US products
+    Html5QrcodeSupportedFormats.QR_CODE,   // Still keep QR enabled as fallback
+  ];
+
+  // Cleanup on unmount
   useEffect(() => {
-    if (!containerRef.current) return;
+    return () => {
+      console.log('🛑 Cleanup: Stopping scanner...');
+      if (scannerRef.current && isScanning) {
+        scannerRef.current.stop().catch((err) => {
+          console.error('⚠️ Error stopping scanner:', err);
+        });
+      }
+    };
+  }, [isScanning]);
 
-    console.log('🎥 BarcodeScanner: Initializing barcode scanner...');
+  // Start camera and scanning
+  const startScanning = async () => {
+    setError('');
+    setScanned('');
+    console.log('🎥 Starting barcode scanner...');
 
-    // Small delay to ensure DOM is fully ready
-    const timer = setTimeout(() => {
-      initializeQuagga();
-    }, 100);
+    try {
+      const html5QrCode = new Html5Qrcode('barcode-reader');
+      scannerRef.current = html5QrCode;
 
-    const initializeQuagga = () => {
-      if (!containerRef.current) return;
-
-      console.log('🚀 Starting Quagga2 initialization...');
-
-      Quagga.init(
+      await html5QrCode.start(
+        { facingMode: 'environment' }, // Force back camera
         {
-          inputStream: {
-            type: 'LiveStream',
-            target: containerRef.current,
-            constraints: {
-              width: { min: 320, ideal: 640, max: 1280 },
-              height: { min: 240, ideal: 480, max: 960 },
-              facingMode: 'environment',
-              aspectRatio: { min: 1, max: 2 }
-            }
-          },
-          locator: {
-            patchSize: 'medium',
-            halfSample: true
-          },
-          numOfWorkers: navigator.hardwareConcurrency || 4,
-          decoder: {
-            readers: [
-              'ean_reader',
-              'ean_8_reader',
-              'code_128_reader',
-              'upc_reader'
-            ]
-          },
-          locate: true
-        } as any,
-        (err) => {
-          if (err) {
-            console.error('❌ Quagga init error:', err);
-            setError('Camera setup failed. Check permissions and try again.');
-            return;
-          }
-
-          console.log('✅ Quagga initialized');
-          try {
-            Quagga.start();
-            setInitialized(true);
-            console.log('✅ Camera stream started - scanning ready');
-          } catch (startErr) {
-            console.error('❌ Quagga start error:', startErr);
-            setError('Failed to start camera stream');
-          }
+          fps: 10,
+          qrbox: { width: 300, height: 150 }, // Wide box for rectangular barcodes
+          aspectRatio: 1.0,
+          formatsToSupport: formatsToSupport
+        },
+        (decodedText: string) => {
+          // SUCCESS - Barcode detected
+          console.log('📦 Barcode detected:', decodedText);
+          setScanned(decodedText);
+          onDetected(decodedText);
+          // Don't stop automatically - let user scan multiple items or close manually
+        },
+        () => {
+          // Scanning in progress - ignore errors
         }
       );
 
-      // Detect barcodes
-      Quagga.onDetected((data) => {
-        if (data.codeResult?.code && data.codeResult.code.length > 3) {
-          const code = data.codeResult.code;
-          console.log('📦 Barcode detected:', code);
-          setScanned(code);
-          onDetected(code);
-          Quagga.stop();
-        }
-      });
-    };
+      setIsScanning(true);
+      console.log('✅ Scanner started - ready for barcodes');
+    } catch (err: any) {
+      console.error('❌ Scanner start error:', err);
+      let friendlyError = 'Camera failed to start: ';
 
-    return () => {
-      clearTimeout(timer);
-      try {
-        Quagga.stop();
-      } catch (err) {
-        console.error('Cleanup error:', err);
+      if (err.name === 'NotAllowedError') {
+        friendlyError = 'Permission denied. Grant camera access in browser settings.';
+      } else if (err.name === 'NotFoundError') {
+        friendlyError = 'No camera found on this device.';
+      } else if (err.name === 'NotReadableError') {
+        friendlyError = 'Camera is in use by another app.';
+      } else if (err.message) {
+        friendlyError += err.message;
       }
-    };
-  }, [onDetected]);
+
+      setError(friendlyError);
+    }
+  };
+
+  // Stop camera
+  const stopScanning = async () => {
+    console.log('🛑 Stopping scanner...');
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+        setIsScanning(false);
+        setTorchOn(false);
+        console.log('✅ Scanner stopped');
+      } catch (err: any) {
+        console.error('⚠️ Error stopping scanner:', err);
+      }
+    }
+  };
+
+  // Toggle flashlight
+  const toggleTorch = async () => {
+    if (!scannerRef.current) return;
+
+    try {
+      const newTorchState = !torchOn;
+      console.log('💡 Toggling torch:', newTorchState ? 'ON' : 'OFF');
+
+      await scannerRef.current.applyVideoConstraints({
+        advanced: [{ torch: newTorchState }]
+      });
+
+      setTorchOn(newTorchState);
+    } catch (err: any) {
+      console.error('❌ Torch error:', err);
+      setError('Torch not supported on this device.');
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
-      {/* Header with Close Button */}
-      <div className="absolute top-0 left-0 right-0 flex justify-between items-center p-4 bg-gradient-to-b from-black to-transparent z-20">
-        <h2 className="text-white font-semibold text-lg">Scan Barcode</h2>
-        <button
-          onClick={onClose}
-          className="p-2 hover:bg-gray-800 rounded-full transition-colors"
-        >
-          <X size={24} className="text-white" />
-        </button>
-      </div>
-
-      {/* The Camera Container - Quagga will render here */}
-      <div 
-        ref={containerRef}
-        className="relative w-full max-w-md h-96 bg-black overflow-hidden border-2 border-yellow-500 rounded-lg shadow-lg"
-      >
-        {/* Quagga will inject its own video/canvas here */}
-
-        {/* The Red "Laser" Line (CSS Overlay) - Target for user alignment */}
-        {initialized && (
-          <div className="absolute top-1/2 left-4 right-4 h-1 bg-red-500 shadow-[0_0_12px_rgba(255,0,0,0.9)] z-10 transform -translate-y-1/2" />
-        )}
-        
-        {/* Corner markers for framing */}
-        {initialized && (
-          <>
-            <div className="absolute top-8 left-8 w-8 h-8 border-l-4 border-t-4 border-yellow-400 z-10" />
-            <div className="absolute top-8 right-8 w-8 h-8 border-r-4 border-t-4 border-yellow-400 z-10" />
-            <div className="absolute bottom-8 left-8 w-8 h-8 border-l-4 border-b-4 border-yellow-400 z-10" />
-            <div className="absolute bottom-8 right-8 w-8 h-8 border-r-4 border-b-4 border-yellow-400 z-10" />
-          </>
-        )}
-        
-        {/* Helper Text */}
-        {initialized && (
-          <p className="absolute bottom-4 w-full text-center text-white text-sm bg-black/60 py-2 font-medium z-10">
-            Align barcode with <span className="text-red-400">red line</span>
-          </p>
-        )}
-
-        {/* Loading state */}
-        {!initialized && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
-              <p className="text-white text-sm">Initializing camera...</p>
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-slate-900 rounded-2xl shadow-2xl w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-2xl border border-slate-800 overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="p-3 sm:p-6 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500 shrink-0">
+              📷
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-2xl font-bold text-white truncate">Barcode Scanner</h2>
+              <p className="text-slate-400 text-xs sm:text-sm">EAN-13 • UPC • Code128</p>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Focus Instructions */}
-      <div className="mt-6 px-6 py-4 bg-blue-900/30 border border-blue-500/50 rounded-lg max-w-sm text-center">
-        <p className="text-white text-sm">
-          <strong>Camera Tips:</strong> Ensure camera permission is granted. Point camera at barcode and keep steady.
-        </p>
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="mt-4 px-6 py-3 bg-red-900/30 border border-red-500/50 rounded-lg flex items-center gap-2 max-w-sm">
-          <AlertCircle size={20} className="text-red-400 flex-shrink-0" />
-          <p className="text-red-200 text-sm">{error}</p>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-800 rounded-lg transition text-slate-400 hover:text-white shrink-0"
+          >
+            <X className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
         </div>
-      )}
 
-      {/* Scanned Code Display */}
-      {scanned && (
-        <div className="mt-4 px-6 py-3 bg-green-900/30 border border-green-500/50 rounded-lg">
-          <p className="text-green-200 text-sm">
-            <strong>Scanned:</strong> {scanned}
-          </p>
+        <div className="flex-1 overflow-hidden flex flex-col p-3 sm:p-6">
+          {/* Camera Viewport */}
+          <div
+            id="barcode-reader"
+            className="flex-1 rounded-lg overflow-hidden bg-black border-2 border-yellow-500 mb-4 flex items-center justify-center"
+          >
+            {!isScanning && !error && (
+              <div className="text-center">
+                <Camera className="w-12 h-12 text-slate-600 mx-auto mb-2" />
+                <p className="text-slate-400 text-sm">Click "Start Camera" to begin</p>
+              </div>
+            )}
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg mb-4">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <p className="text-red-200 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Barcode Detected */}
+          {scanned && (
+            <div className="flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg mb-4 animate-pulse">
+              <div className="text-green-400 text-lg">✓</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-green-200 font-semibold text-sm">Barcode Detected!</p>
+                <p className="text-green-300 text-sm font-mono break-all">{scanned}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Control Buttons */}
+          <div className="flex gap-2 mb-4">
+            {!isScanning ? (
+              <button
+                onClick={startScanning}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition flex items-center justify-center gap-2"
+              >
+                <Camera className="w-5 h-5" />
+                Start Camera
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={stopScanning}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition"
+                >
+                  Stop Camera
+                </button>
+                <button
+                  onClick={toggleTorch}
+                  className={`py-3 px-4 rounded-lg font-semibold transition flex items-center gap-2 ${
+                    torchOn
+                      ? 'bg-yellow-500/30 text-yellow-400 hover:bg-yellow-500/40 border border-yellow-500/50'
+                      : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                  }`}
+                  title="Toggle flashlight"
+                >
+                  <Flashlight className="w-5 h-5" />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Scanning Tips */}
+          {isScanning && (
+            <div className="text-xs text-slate-300 space-y-1 p-3 bg-slate-800/50 rounded-lg">
+              <p className="font-semibold text-slate-200">📸 Scanning Tips:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Use flashlight if lighting is poor</li>
+                <li>Hold phone level (horizontal)</li>
+                <li>Keep barcode in the box</li>
+                <li>Move slowly if scanning fails</li>
+              </ul>
+            </div>
+          )}
         </div>
-      )}
-
-      {/* Cancel Button */}
-      <button 
-        onClick={onClose}
-        className="mt-8 px-8 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold border border-gray-500 transition-colors"
-      >
-        Cancel
-      </button>
-
-      {/* Info Footer */}
-      <div className="absolute bottom-4 left-4 right-4 text-center text-gray-400 text-xs">
-        <p>Optimized for Kenya Retail • Low-end devices supported</p>
       </div>
     </div>
   );
