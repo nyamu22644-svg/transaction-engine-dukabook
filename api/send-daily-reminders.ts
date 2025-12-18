@@ -8,6 +8,19 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 import { createClient } from '@supabase/supabase-js';
 
+interface Subscription {
+  id: string;
+  store_id: string;
+  expires_at: string;
+  status: string;
+  stores: {
+    id: string;
+    store_name: string;
+    fcm_token: string;
+    notifications_enabled: boolean;
+  };
+}
+
 // Initialize Firebase Admin (server-side)
 const firebaseAdminConfig = {
   projectId: process.env.FIREBASE_PROJECT_ID,

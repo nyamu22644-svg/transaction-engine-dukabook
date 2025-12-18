@@ -8,6 +8,19 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 import { createClient } from '@supabase/supabase-js';
 
+interface Subscription {
+  id: string;
+  store_id: string;
+  expires_at: string;
+  status: string;
+  stores: {
+    id: string;
+    store_name: string;
+    fcm_token: string;
+    notifications_enabled: boolean;
+  };
+}
+
 // Initialize Firebase Admin (server-side)
 const firebaseAdminConfig = {
   projectId: process.env.FIREBASE_PROJECT_ID,
@@ -114,14 +127,16 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         stores!inner(id, store_name, fcm_token, notifications_enabled)
       `)
       .eq('stores.notifications_enabled', true)
-      .not('stores.fcm_token', 'is', null);
+      .not('stores.fcm_token', 'is', null) as any;
+
+    const typedSubscriptions = subscriptions as Subscription[] | null;
 
     if (subError) {
       console.error('❌ Error fetching subscriptions:', subError);
       return res.status(500).json({ error: 'Database error' });
     }
 
-    if (!subscriptions || subscriptions.length === 0) {
+    if (!typedSubscriptions || typedSubscriptions.length === 0) {
       console.log('ℹ️ No active subscriptions with FCM tokens found');
       return res.status(200).json({ 
         message: 'No subscriptions to remind',
@@ -130,7 +145,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       });
     }
 
-    console.log(`📊 Processing ${subscriptions.length} subscriptions for afternoon reminders`);
+    for (const sub of typedSubscriptions) {
 
     let remindersCount = 0;
     const now = new Date();
