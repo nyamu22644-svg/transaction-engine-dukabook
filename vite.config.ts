@@ -14,10 +14,10 @@ export default defineConfig(({ mode }) => {
         react(),
         VitePWA({
           registerType: 'autoUpdate',
-          includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'firebase-messaging-sw.js'],
-          strategies: 'injectManifest',
+          includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+          strategies: 'generateSW',
           srcDir: 'public',
-          filename: 'firebase-messaging-sw.js',
+          filename: 'sw.js',
           manifest: {
             name: 'DukaBook - POS System',
             short_name: 'DukaBook',

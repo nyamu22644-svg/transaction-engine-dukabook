@@ -91,8 +91,15 @@ export const getFCMToken = async (): Promise<string | null> => {
       return null;
     }
 
-    // Get the service worker registration
-    const registration = await navigator.serviceWorker.ready;
+    // Register Firebase messaging service worker
+    let registration: ServiceWorkerRegistration;
+    try {
+      registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      console.log('✅ Firebase messaging service worker registered');
+    } catch (error) {
+      console.log('ℹ️ Using existing service worker registration');
+      registration = await navigator.serviceWorker.ready;
+    }
     
     const token = await getToken(messagingInstance, {
       serviceWorkerRegistration: registration,
