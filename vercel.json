@@ -3,16 +3,8 @@
   "outputDirectory": "dist",
   "crons": [
     {
-      "path": "/api/expiry-checker",
-      "schedule": "0 2 * * *"
-    },
-    {
       "path": "/api/send-daily-reminders",
       "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/send-afternoon-reminders",
-      "schedule": "0 15 * * *"
     }
   ]
 }
