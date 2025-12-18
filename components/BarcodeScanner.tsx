@@ -15,57 +15,105 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
   useEffect(() => {
     if (!scannerRef.current) return;
 
-    Quagga.init(
-      {
-        inputStream: {
-          type: 'LiveStream',
-          target: scannerRef.current,
-          constraints: {
-            width: 640,  // 🚀 Keep resolution low for speed (480p/VGA is standard)
-            height: 480,
-            facingMode: 'environment', // Rear Camera
-            aspectRatio: { min: 1, max: 2 },
-            // 🚀 FOCUS HACK: Attempt to force continuous focus
-            advanced: [{ focusMode: 'continuous' }] as any, 
-          },
-        },
-        locator: {
-          patchSize: 'medium', // 'x-small' for very small barcodes, 'medium' is standard
-          halfSample: true,    // 🚀 SPEED HACK: Processes half the pixels. Much faster.
-        },
-        numOfWorkers: 4,       // Use 4 cores if available
-        decoder: {
-          // Only enable what you need! Disabling others speeds it up 3x.
-          readers: [
-            'ean_reader',        // Standard Kenya Retail (Simba Cement, Soda)
-            'ean_8_reader',      // Small packages
-            'code_128_reader',   // Logistics/Wholesale
-            'upc_reader',        // Imported goods
-          ],
-        },
-        locate: true, // Try to find the barcode box before reading
-      } as any,
-      (err) => {
-        if (err) {
-          console.error('Error starting Quagga:', err);
-          setError('Camera not found or permission denied.');
-          return;
-        }
-        Quagga.start();
-      }
-    );
+    console.log('🎥 BarcodeScanner: Requesting camera access...');
+    console.log('📍 Current URL:', window.location.origin);
+    console.log('🔒 Protocol:', window.location.protocol);
 
-    // The Listener
-    Quagga.onDetected((data) => {
-      // 🚀 ACCURACY CHECK: Quagga can hallucinate. 
-      // Only accept if code is valid (length > 3)
-      if (data.codeResult.code && data.codeResult.code.length > 3) {
-        const code = data.codeResult.code;
-        setScanned(code);
-        onDetected(code);
-        Quagga.stop(); // Stop scanning once found
-      }
-    });
+    // Request camera permissions - works on localhost (HTTP) and HTTPS
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: 'environment' } })
+      .then((stream) => {
+        console.log('✅ Camera permission granted, stream acquired');
+        // Stop the test stream
+        stream.getTracks().forEach(track => track.stop());
+        // Permissions granted, start Quagga
+        initializeQuagga();
+      })
+      .catch((permissionError) => {
+        console.error('❌ Camera permission error:', permissionError);
+        console.error('Error name:', permissionError.name);
+        console.error('Error message:', permissionError.message);
+        
+        let friendlyError = 'Camera access failed: ';
+        
+        if (permissionError.name === 'NotAllowedError') {
+          friendlyError += 'Permission denied. Check browser settings and grant camera access.';
+        } else if (permissionError.name === 'NotFoundError') {
+          friendlyError += 'No camera device found. Ensure device has a camera.';
+        } else if (permissionError.name === 'NotReadableError') {
+          friendlyError += 'Camera is in use by another app. Close other apps using camera.';
+        } else if (permissionError.name === 'SecurityError') {
+          friendlyError += 'Security error. Ensure you\'re using HTTPS (Vercel) or localhost.';
+        } else {
+          friendlyError += permissionError.message || 'Unknown error.';
+        }
+        
+        setError(friendlyError);
+      });
+
+    const initializeQuagga = () => {
+      console.log('🚀 Initializing Quagga2 for barcode detection...');
+      Quagga.init(
+        {
+          inputStream: {
+            type: 'LiveStream',
+            target: scannerRef.current,
+            constraints: {
+              width: 640,  // 🚀 Keep resolution low for speed (480p/VGA is standard)
+              height: 480,
+              facingMode: 'environment', // Rear Camera
+              aspectRatio: { min: 1, max: 2 },
+              // 🚀 FOCUS HACK: Attempt to force continuous focus
+              advanced: [{ focusMode: 'continuous' }] as any, 
+            },
+          },
+          locator: {
+            patchSize: 'medium', // 'x-small' for very small barcodes, 'medium' is standard
+            halfSample: true,    // 🚀 SPEED HACK: Processes half the pixels. Much faster.
+          },
+          numOfWorkers: 4,       // Use 4 cores if available
+          decoder: {
+            // Only enable what you need! Disabling others speeds it up 3x.
+            readers: [
+              'ean_reader',        // Standard Kenya Retail (Simba Cement, Soda)
+              'ean_8_reader',      // Small packages
+              'code_128_reader',   // Logistics/Wholesale
+              'upc_reader',        // Imported goods
+            ],
+          },
+          locate: true, // Try to find the barcode box before reading
+        } as any,
+        (err) => {
+          if (err) {
+            console.error('❌ Error initializing Quagga:', err);
+            setError(`Barcode scanner initialization failed: ${err.message || 'Unknown error. Please ensure camera is available.'}`);
+            return;
+          }
+          console.log('✅ Quagga initialized successfully');
+          try {
+            console.log('▶️ Starting Quagga video stream...');
+            Quagga.start();
+            console.log('✅ Quagga stream started');
+          } catch (startErr) {
+            console.error('❌ Error starting Quagga stream:', startErr);
+            setError('Failed to start camera stream. Try closing other apps using camera.');
+          }
+        }
+      );
+
+      // The Listener
+      Quagga.onDetected((data) => {
+        // 🚀 ACCURACY CHECK: Quagga can hallucinate. 
+        // Only accept if code is valid (length > 3)
+        if (data.codeResult.code && data.codeResult.code.length > 3) {
+          const code = data.codeResult.code;
+          console.log('📦 Barcode detected:', code);
+          setScanned(code);
+          onDetected(code);
+          Quagga.stop(); // Stop scanning once found
+        }
+      });
+    };
 
     return () => {
       try {
@@ -112,7 +160,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
       {/* Focus Instructions */}
       <div className="mt-6 px-6 py-4 bg-blue-900/30 border border-blue-500/50 rounded-lg max-w-sm text-center">
         <p className="text-white text-sm">
-          <strong>If blurry:</strong> Pull phone back, then move closer slowly. This forces autofocus to re-engage.
+          <strong>Camera Tips:</strong> Ensure camera permission is granted. If blurry, pull phone back then move closer slowly to force autofocus.
         </p>
       </div>
 

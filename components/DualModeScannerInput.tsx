@@ -165,6 +165,11 @@ export const DualModeScannerInput: React.FC<DualModeScannerInputProps> = ({
       setScanning(true);
       setError('');
 
+      // Request camera permissions explicitly first
+      await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).catch((permErr) => {
+        throw new Error(`Camera permission denied: ${permErr.message}`);
+      });
+
       // Small delay to ensure video element is mounted in DOM
       await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -229,7 +234,8 @@ export const DualModeScannerInput: React.FC<DualModeScannerInputProps> = ({
       });
     } catch (err) {
       console.error('Camera scanner error:', err);
-      setError('Camera not available. Switch to USB mode.');
+      const errMsg = err instanceof Error ? err.message : 'Camera not available. Switch to USB mode.';
+      setError(errMsg);
       setScanning(false);
     }
   };
