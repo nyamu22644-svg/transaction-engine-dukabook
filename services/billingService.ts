@@ -201,12 +201,12 @@ export const getEffectiveTierSync = (storeId: string): {
     }
 
     // Map plan_name to tier
+    // Note: free_trial should NOT be mapped here - is_trial flag handles it above
     const tierMap: { [key: string]: 'BASIC' | 'PREMIUM' } = {
-      'free_trial': 'BASIC',
       'basic': 'BASIC',
       'premium': 'PREMIUM',
     };
-    const tier = tierMap[subscription.plan_name] || 'BASIC';
+    const tier = tierMap[subscription.plan_name.toLowerCase()] || 'BASIC';
 
     return {
       tier,
@@ -379,12 +379,12 @@ export const getEffectiveTier = async (storeId: string): Promise<{
     }
 
     // Map plan_name to tier
+    // Note: free_trial should NOT be mapped here - is_trial flag handles it above
     const tierMap: { [key: string]: 'BASIC' | 'PREMIUM' } = {
-      'free_trial': 'BASIC',
       'basic': 'BASIC',
       'premium': 'PREMIUM',
     };
-    const planTier = tierMap[subscription.plan_name] || 'BASIC';
+    const planTier = tierMap[subscription.plan_name.toLowerCase()] || 'BASIC';
 
     return {
       tier: planTier,
