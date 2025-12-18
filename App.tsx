@@ -4,6 +4,7 @@ import { EmployerDashboard } from './components/EmployerDashboard';
 import { ReceiptVerification } from './components/ReceiptVerification';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { StoreLogin } from './components/StoreLogin';
+import { NotificationManager } from './components/NotificationManager';
 import CallbackPage from './pages/CallbackPage';
 import { LayoutDashboard, Store, WifiOff, LogOut, Lock, RotateCw } from 'lucide-react';
 import { UserRole, StoreProfile } from './types';
@@ -333,6 +334,8 @@ const App: React.FC = () => {
             >
               <RotateCw className="w-4 h-4" />
             </button>
+
+            <NotificationManager />
 
             <button 
               onClick={handleLogout}

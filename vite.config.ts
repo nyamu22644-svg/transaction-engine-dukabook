@@ -14,7 +14,10 @@ export default defineConfig(({ mode }) => {
         react(),
         VitePWA({
           registerType: 'autoUpdate',
-          includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+          includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'firebase-messaging-sw.js'],
+          strategies: 'injectManifest',
+          srcDir: 'public',
+          filename: 'firebase-messaging-sw.js',
           manifest: {
             name: 'DukaBook - POS System',
             short_name: 'DukaBook',
@@ -55,6 +58,17 @@ export default defineConfig(({ mode }) => {
                   cacheName: 'google-fonts-cache',
                   expiration: {
                     maxEntries: 20,
+                    maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+                  }
+                }
+              },
+              {
+                urlPattern: /^https:\/\/www\.gstatic\.com\/.*/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'firebase-cache',
+                  expiration: {
+                    maxEntries: 10,
                     maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
                   }
                 }

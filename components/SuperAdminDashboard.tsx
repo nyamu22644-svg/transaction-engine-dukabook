@@ -9,6 +9,7 @@ import { C2BPaymentsManager } from './C2BPaymentsManager';
 import IntaSendPaymentHistory from './IntaSendPaymentHistory';
 import { ManualReminderPanel } from './ManualReminderPanel';
 import { ReminderHistoryPanel } from './ReminderHistoryPanel';
+import { ReminderSettingsPanel } from './ReminderSettingsPanel';
 
 // Type for store with subscription info
 interface StoreWithSubscription extends StoreProfile {
@@ -76,6 +77,9 @@ export const SuperAdminDashboard: React.FC = () => {
 
   // Reminder History Panel State
   const [showReminderHistory, setShowReminderHistory] = useState(false);
+
+  // Reminder Settings Panel State
+  const [showReminderSettings, setShowReminderSettings] = useState(false);
 
   const loadStores = async () => {
     const [storesData, subscriptionsData] = await Promise.all([
@@ -371,6 +375,13 @@ export const SuperAdminDashboard: React.FC = () => {
             >
               <History className="w-5 h-5" />
               Reminder History
+            </button>
+            <button 
+              onClick={() => setShowReminderSettings(true)}
+              className="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-green-900/20 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+            >
+              <Clock className="w-5 h-5" />
+              Configure Reminders
             </button>
             <button 
               onClick={() => setShowModal(true)}
@@ -1004,6 +1015,11 @@ export const SuperAdminDashboard: React.FC = () => {
         {/* REMINDER HISTORY PANEL */}
         {showReminderHistory && (
           <ReminderHistoryPanel onClose={() => setShowReminderHistory(false)} />
+        )}
+
+        {/* REMINDER SETTINGS PANEL */}
+        {showReminderSettings && (
+          <ReminderSettingsPanel onClose={() => setShowReminderSettings(false)} />
         )}
 
         {/* IntaSend Payment History */}
