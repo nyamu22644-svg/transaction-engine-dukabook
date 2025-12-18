@@ -8,118 +8,134 @@ interface BarcodeScannerProps {
 }
 
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onClose }) => {
-  const scannerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string>('');
   const [scanned, setScanned] = useState<string>('');
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    if (!scannerRef.current) return;
+    if (!containerRef.current) return;
 
-    console.log('🎥 BarcodeScanner: Requesting camera access...');
-    console.log('📍 Current URL:', window.location.origin);
-    console.log('🔒 Protocol:', window.location.protocol);
+    console.log('🎥 BarcodeScanner: Starting camera setup...');
 
-    // Request camera permissions - works on localhost (HTTP) and HTTPS
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' } })
-      .then((stream) => {
-        console.log('✅ Camera permission granted, stream acquired');
-        // Stop the test stream
-        stream.getTracks().forEach(track => track.stop());
-        // Permissions granted, start Quagga
-        initializeQuagga();
-      })
-      .catch((permissionError) => {
-        console.error('❌ Camera permission error:', permissionError);
-        console.error('Error name:', permissionError.name);
-        console.error('Error message:', permissionError.message);
+    // Request camera permissions and initialize
+    const initializeCamera = async () => {
+      try {
+        console.log('📷 Requesting camera access...');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        });
+
+        console.log('✅ Camera permission granted');
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+          
+          // Wait for video to be ready
+          videoRef.current.onloadedmetadata = () => {
+            console.log('✅ Video metadata loaded, starting Quagga...');
+            initializeQuagga();
+          };
+        }
+      } catch (err: any) {
+        console.error('❌ Camera error:', err);
+        let friendlyError = 'Camera failed: ';
         
-        let friendlyError = 'Camera access failed: ';
-        
-        if (permissionError.name === 'NotAllowedError') {
-          friendlyError += 'Permission denied. Check browser settings and grant camera access.';
-        } else if (permissionError.name === 'NotFoundError') {
-          friendlyError += 'No camera device found. Ensure device has a camera.';
-        } else if (permissionError.name === 'NotReadableError') {
-          friendlyError += 'Camera is in use by another app. Close other apps using camera.';
-        } else if (permissionError.name === 'SecurityError') {
-          friendlyError += 'Security error. Ensure you\'re using HTTPS (Vercel) or localhost.';
+        if (err.name === 'NotAllowedError') {
+          friendlyError += 'Permission denied. Grant camera access in browser settings.';
+        } else if (err.name === 'NotFoundError') {
+          friendlyError += 'No camera found on this device.';
+        } else if (err.name === 'NotReadableError') {
+          friendlyError += 'Camera is in use by another app.';
         } else {
-          friendlyError += permissionError.message || 'Unknown error.';
+          friendlyError += err.message || 'Unknown error';
         }
         
         setError(friendlyError);
-      });
+      }
+    };
 
     const initializeQuagga = () => {
-      console.log('🚀 Initializing Quagga2 for barcode detection...');
+      if (!containerRef.current || !videoRef.current) return;
+
+      console.log('🚀 Initializing Quagga2...');
+
       Quagga.init(
         {
           inputStream: {
             type: 'LiveStream',
-            target: scannerRef.current,
+            target: containerRef.current,
             constraints: {
-              width: 640,  // 🚀 Keep resolution low for speed (480p/VGA is standard)
+              width: 640,
               height: 480,
-              facingMode: 'environment', // Rear Camera
-              aspectRatio: { min: 1, max: 2 },
-              // 🚀 FOCUS HACK: Attempt to force continuous focus
-              advanced: [{ focusMode: 'continuous' }] as any, 
-            },
+              facingMode: 'environment',
+              aspectRatio: { min: 1, max: 2 }
+            }
           },
           locator: {
-            patchSize: 'medium', // 'x-small' for very small barcodes, 'medium' is standard
-            halfSample: true,    // 🚀 SPEED HACK: Processes half the pixels. Much faster.
+            patchSize: 'medium',
+            halfSample: true
           },
-          numOfWorkers: 4,       // Use 4 cores if available
+          numOfWorkers: 4,
           decoder: {
-            // Only enable what you need! Disabling others speeds it up 3x.
             readers: [
-              'ean_reader',        // Standard Kenya Retail (Simba Cement, Soda)
-              'ean_8_reader',      // Small packages
-              'code_128_reader',   // Logistics/Wholesale
-              'upc_reader',        // Imported goods
-            ],
+              'ean_reader',
+              'ean_8_reader',
+              'code_128_reader',
+              'upc_reader'
+            ]
           },
-          locate: true, // Try to find the barcode box before reading
+          locate: true
         } as any,
         (err) => {
           if (err) {
-            console.error('❌ Error initializing Quagga:', err);
-            setError(`Barcode scanner initialization failed: ${err.message || 'Unknown error. Please ensure camera is available.'}`);
+            console.error('❌ Quagga init error:', err);
+            setError('Scanner initialization failed: ' + err.message);
             return;
           }
-          console.log('✅ Quagga initialized successfully');
+
+          console.log('✅ Quagga initialized');
           try {
-            console.log('▶️ Starting Quagga video stream...');
             Quagga.start();
-            console.log('✅ Quagga stream started');
+            setInitialized(true);
+            console.log('✅ Quagga started - ready to scan');
           } catch (startErr) {
-            console.error('❌ Error starting Quagga stream:', startErr);
-            setError('Failed to start camera stream. Try closing other apps using camera.');
+            console.error('❌ Quagga start error:', startErr);
+            setError('Failed to start scanner');
           }
         }
       );
 
-      // The Listener
+      // Detect barcodes
       Quagga.onDetected((data) => {
-        // 🚀 ACCURACY CHECK: Quagga can hallucinate. 
-        // Only accept if code is valid (length > 3)
-        if (data.codeResult.code && data.codeResult.code.length > 3) {
+        if (data.codeResult?.code && data.codeResult.code.length > 3) {
           const code = data.codeResult.code;
           console.log('📦 Barcode detected:', code);
           setScanned(code);
           onDetected(code);
-          Quagga.stop(); // Stop scanning once found
+          Quagga.stop();
         }
       });
     };
 
+    initializeCamera();
+
     return () => {
       try {
         Quagga.stop();
+        if (videoRef.current?.srcObject) {
+          const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+          tracks.forEach(track => track.stop());
+        }
       } catch (err) {
-        console.error('Error stopping Quagga:', err);
+        console.error('Cleanup error:', err);
       }
     };
   }, [onDetected]);
@@ -137,30 +153,63 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onDetected, onCl
         </button>
       </div>
 
-      {/* The Camera Window */}
+      {/* The Camera Container - Quagga will render here */}
       <div 
-        ref={scannerRef} 
+        ref={containerRef}
         className="relative w-full max-w-md h-96 bg-black overflow-hidden border-2 border-yellow-500 rounded-lg shadow-lg"
       >
+        {/* Hidden video element for stream capture */}
+        <video
+          ref={videoRef}
+          style={{ display: 'none' }}
+          playsInline
+          autoPlay
+          muted
+        />
+        
+        {/* Canvas for Quagga processing */}
+        <canvas
+          ref={canvasRef}
+          style={{ width: '100%', height: '100%', display: 'block' }}
+        />
+
         {/* The Red "Laser" Line (CSS Overlay) - Target for user alignment */}
-        <div className="absolute top-1/2 left-4 right-4 h-1 bg-red-500 shadow-[0_0_12px_rgba(255,0,0,0.9)] z-10 transform -translate-y-1/2" />
+        {initialized && (
+          <div className="absolute top-1/2 left-4 right-4 h-1 bg-red-500 shadow-[0_0_12px_rgba(255,0,0,0.9)] z-10 transform -translate-y-1/2" />
+        )}
         
         {/* Corner markers for framing */}
-        <div className="absolute top-8 left-8 w-8 h-8 border-l-4 border-t-4 border-yellow-400" />
-        <div className="absolute top-8 right-8 w-8 h-8 border-r-4 border-t-4 border-yellow-400" />
-        <div className="absolute bottom-8 left-8 w-8 h-8 border-l-4 border-b-4 border-yellow-400" />
-        <div className="absolute bottom-8 right-8 w-8 h-8 border-r-4 border-b-4 border-yellow-400" />
+        {initialized && (
+          <>
+            <div className="absolute top-8 left-8 w-8 h-8 border-l-4 border-t-4 border-yellow-400" />
+            <div className="absolute top-8 right-8 w-8 h-8 border-r-4 border-t-4 border-yellow-400" />
+            <div className="absolute bottom-8 left-8 w-8 h-8 border-l-4 border-b-4 border-yellow-400" />
+            <div className="absolute bottom-8 right-8 w-8 h-8 border-r-4 border-b-4 border-yellow-400" />
+          </>
+        )}
         
         {/* Helper Text */}
-        <p className="absolute bottom-4 w-full text-center text-white text-sm bg-black/60 py-2 font-medium">
-          Align barcode with <span className="text-red-400">red line</span>
-        </p>
+        {initialized && (
+          <p className="absolute bottom-4 w-full text-center text-white text-sm bg-black/60 py-2 font-medium">
+            Align barcode with <span className="text-red-400">red line</span>
+          </p>
+        )}
+
+        {/* Loading state */}
+        {!initialized && !error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
+              <p className="text-white text-sm">Initializing camera...</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Focus Instructions */}
       <div className="mt-6 px-6 py-4 bg-blue-900/30 border border-blue-500/50 rounded-lg max-w-sm text-center">
         <p className="text-white text-sm">
-          <strong>Camera Tips:</strong> Ensure camera permission is granted. If blurry, pull phone back then move closer slowly to force autofocus.
+          <strong>Camera Tips:</strong> Ensure camera permission is granted. Point camera at barcode and keep steady.
         </p>
       </div>
 
