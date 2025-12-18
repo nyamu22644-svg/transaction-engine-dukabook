@@ -19,6 +19,10 @@ import { SalesLocationMap } from './SalesLocationMap';
 import { WarrantyLookup } from './WarrantyLookup';
 import { WarrantyDashboard } from './WarrantyDashboard';
 import { SubscriptionPayment } from './SubscriptionPayment';
+import { DebtorDashboard } from './DebtorDashboard';
+import { BlindClose } from './BlindClose';
+import { DailyReconciliation } from './DailyReconciliation';
+import { InventoryEntryHub } from './InventoryEntryHub';
 import { 
   PremiumFloatingBadge, 
   TrialCountdownBanner, 
@@ -51,6 +55,7 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
   
   // UI State
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showInventoryHub, setShowInventoryHub] = useState(false);
   const [editingStockId, setEditingStockId] = useState<string | null>(null);
   const [newStockValue, setNewStockValue] = useState<string>("");
   const [showExpiringOnly, setShowExpiringOnly] = useState(false);
@@ -62,7 +67,7 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [showSubscriptionPayment, setShowSubscriptionPayment] = useState(false);
   
-  // Inventory Import/Catalog States
+  // Inventory Import/Catalog States (DEPRECATED - replaced by InventoryHub)
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -86,6 +91,11 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
   // Warranty Management State
   const [showWarrantyLookup, setShowWarrantyLookup] = useState(false);
   const [showWarrantyDashboard, setShowWarrantyDashboard] = useState(false);
+
+  // Debtor & Reconciliation State
+  const [showDebtorDashboard, setShowDebtorDashboard] = useState(false);
+  const [showBlindClose, setShowBlindClose] = useState(false);
+  const [showDailyReconciliation, setShowDailyReconciliation] = useState(false);
 
   // Premium Nudge State
   const [isTrialActive, setIsTrialActive] = useState(false);
@@ -919,6 +929,28 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
             </button>
           </div>
         </div>
+
+        {/* Madeni & Reconciliation - THE KILLER FEATURE */}
+        <div className="md:col-span-1">
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200 shadow-sm p-4 space-y-3">
+            <h3 className="font-bold text-purple-900 flex items-center gap-2 border-b border-purple-200 pb-2">
+              <TrendingUp className="w-4 h-4" />
+              Madeni Management
+            </h3>
+            <button
+              onClick={() => setShowDebtorDashboard(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
+            >
+              📒 Customer Debtors
+            </button>
+            <button
+              onClick={() => setShowDailyReconciliation(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+            >
+              📊 Daily Reconciliation
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Inventory & Supplier Orders */}
@@ -961,7 +993,7 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
               {showExpiringOnly ? 'Expiring' : 'Filter'}
             </button>
             <button 
-              onClick={() => setShowAddForm(!showAddForm)}
+              onClick={() => setShowInventoryHub(true)}
               className={`flex-1 sm:flex-none text-xs flex items-center justify-center gap-1 ${theme.bg} ${theme.hover} text-white px-3 py-1.5 rounded-lg transition`}
             >
               <Plus className="w-3.5 h-3.5" />
@@ -1313,6 +1345,70 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
             setShowSubscriptionPayment(false);
             // Optionally reload store data to reflect new tier
           }}
+        />
+      )}
+
+      {/* Debtor Dashboard Modal - THE KILLER FEATURE */}
+      {showDebtorDashboard && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 overflow-y-auto">
+          <div className="min-h-screen p-4 md:p-6">
+            <div className="max-w-7xl mx-auto">
+              <button
+                onClick={() => setShowDebtorDashboard(false)}
+                className="mb-4 p-2 bg-red-600/20 hover:bg-red-600/30 rounded-lg text-red-400 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <DebtorDashboard 
+                store={store} 
+                userRole={'OWNER'}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blind Close Modal - Staff Cash Reconciliation */}
+      {showBlindClose && (
+        <BlindClose 
+          store={store} 
+          userRole={'STAFF'}
+          onClose={() => setShowBlindClose(false)}
+        />
+      )}
+
+      {/* Daily Reconciliation Modal - Owner End-of-Day */}
+      {showDailyReconciliation && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 overflow-y-auto">
+          <div className="min-h-screen p-4 md:p-6">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl md:text-3xl font-bold text-white">Daily Reconciliation Report</h2>
+                <button 
+                  onClick={() => setShowDailyReconciliation(false)}
+                  className="p-2 bg-red-600/20 hover:bg-red-600/30 rounded-lg text-red-400 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="bg-white rounded-lg p-6">
+                <DailyReconciliation store={store} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INVENTORY ENTRY HUB - NEW UNIFIED ADD ITEMS VIEW */}
+      {showInventoryHub && (
+        <InventoryEntryHub
+          storeId={store.id}
+          existingInventory={inventory}
+          userRole="OWNER"
+          onItemsAdded={() => {
+            loadData();
+          }}
+          onClose={() => setShowInventoryHub(false)}
         />
       )}
 

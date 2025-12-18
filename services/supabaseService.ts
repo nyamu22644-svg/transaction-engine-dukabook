@@ -682,7 +682,7 @@ export const deleteStaffMember = async (agentId: string): Promise<void> => {
 
 export const fetchAuditLogs = async (storeId: string): Promise<AuditLog[]> => {
   return supa(async () => {
-    const { data, error } = await supabase!.from('audit_logs').select('*').eq('store_id', storeId).order('timestamp', { ascending: false });
+    const { data, error } = await supabase!.from('audit_logs').select('*').eq('store_id', storeId).order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
   }, async () => getLocalLogs().filter(l => l.store_id === storeId));

@@ -4,10 +4,15 @@ import { MapPin, Loader2, Save, ShoppingCart, User, Smartphone, CreditCard, Bank
 import { fetchInventory, recordSale, deleteSale, fetchDebtors, fetchRecentSales, recordExpense, addNewInventoryItem, fetchAgents } from '../services/supabaseService';
 import { createSerializedItem } from '../services/warrantyService';
 import { deductBreakoutUnits } from '../services/inventoryService';
+import { recordPOSSale } from '../services/barcodePOSService';
 import { InventoryItem, PaymentMode, GeoLocationState, StoreProfile, SalesRecord, Agent } from '../types';
 import { DebtorsList } from './DebtorsList';
 import { DemoLockModal } from './DemoLockModal';
 import { BarcodeScanner } from './BarcodeScanner';
+import { BarcodePOS } from './BarcodePOS';
+import { POSOverlay } from './POSOverlay';
+import { POSReceipt } from './POSReceipt';
+import { InventoryEntryHub } from './InventoryEntryHub';
 import { OfflineIndicator } from './ui/OfflineIndicator';
 import { THEME_COLORS, DEFAULT_THEME, BUSINESS_CONFIG } from '../constants';
 import { DEMO_INVENTORY, DEMO_DEBTORS, DEMO_SALES } from '../demoData';
@@ -89,7 +94,10 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
   const [historySales, setHistorySales] = useState<SalesRecord[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Staff Add Item State
+  // Inventory Entry Hub State (new unified add items view)
+  const [showInventoryHub, setShowInventoryHub] = useState(false);
+
+  // Staff Add Item State (DEPRECATED - replaced by InventoryHub)
   const [showAddItem, setShowAddItem] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [scanMode, setScanMode] = useState<'add' | 'sell'>('sell'); // 'sell' = scan to select item, 'add' = scan to add new item
@@ -104,6 +112,13 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
   const [addingItem, setAddingItem] = useState(false);
   const [itemAddedSuccess, setItemAddedSuccess] = useState(false);
   const [scanFeedback, setScanFeedback] = useState<{type: 'found' | 'new' | null, message: string}>({type: null, message: ''});
+
+  // POS Overlay Modal State
+  const [showPOSOverlay, setShowPOSOverlay] = useState(false);
+  const [posReceipt, setPosReceipt] = useState<any>(null);
+
+  // Barcode POS Modal State
+  const [showBarcodePOS, setShowBarcodePOS] = useState(false);
 
   // Staff Points State
   const [staffPoints, setStaffPoints] = useState<{points: number, rank: number, total: number} | null>(null);
@@ -732,14 +747,8 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
          </div>
          
          <div className="flex-1 overflow-y-auto p-4 max-w-lg mx-auto w-full space-y-4">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex items-center gap-2 text-slate-500 mb-2">
-                   <Calendar className="w-4 h-4" />
-                   <span className="text-xs font-bold uppercase tracking-wider">Today's Sales</span>
-                </div>
-                <div className="text-3xl font-bold text-slate-900">KES {todayTotal.toLocaleString()}</div>
-                <div className="text-xs text-slate-400 mt-1">{todaysSales.length} transactions today</div>
-            </div>
+            {/* HIDDEN FROM STAFF: Today's Total - Staff can't see daily totals (Blind Close) */}
+            {/* Total is only visible to owner in DailyReconciliation after BlindClose */}
 
             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider ml-1">Recent Transactions</h3>
             <div className="space-y-3 pb-8">
@@ -946,7 +955,19 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
       <div className="p-6 space-y-6">
         {/* Only show Quick Actions in Sale Mode */}
         {entryMode === 'SALE' && (
-           <div className="grid grid-cols-2 gap-3">
+           <div className="grid grid-cols-3 gap-3">
+               <button 
+                 type="button"
+                 onClick={() => setShowPOSOverlay(true)}
+                 className="bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-200 py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all transform hover:scale-[1.02] active:scale-95 border border-blue-500"
+               >
+                 <div className="flex items-center gap-2">
+                    <ScanLine className="w-6 h-6 text-white" />
+                    <span className="font-bold text-lg uppercase tracking-tight">POS</span>
+                 </div>
+                 <span className="text-blue-100 text-[10px] font-medium">Full Screen</span>
+               </button>
+
                <button 
                  type="button"
                  onClick={() => setShowDebtorsList(true)}
@@ -1163,7 +1184,7 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowAddItem(true)}
+                    onClick={() => setShowInventoryHub(true)}
                     className={`text-xs flex items-center gap-1 ${theme.text} hover:underline font-medium`}
                   >
                     <Plus className="w-3 h-3" />
@@ -1540,6 +1561,56 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
         />
       )}
 
+      {/* POS Overlay Modal (Full Screen) */}
+      {showPOSOverlay && (
+        <POSOverlay
+          store={store}
+          onClose={() => setShowPOSOverlay(false)}
+          onCheckout={async (data) => {
+            try {
+              const { cart, payment } = data;
+              
+              // Record the POS sale to database
+              const result = await recordPOSSale(
+                store.id,
+                cart,
+                payment,
+                user?.id
+              );
+
+              // Show receipt
+              setPosReceipt(result.receiptData);
+              setShowPOSOverlay(false);
+            } catch (error) {
+              console.error('Failed to record sale:', error);
+              alert('Failed to record sale. Please try again.');
+            }
+          }}
+        />
+      )}
+
+      {/* POS Receipt Modal */}
+      {posReceipt && (
+        <POSReceipt
+          receipt={posReceipt}
+          onClose={() => setPosReceipt(null)}
+        />
+      )}
+
+      {/* Barcode POS Modal */}
+      {showBarcodePOS && (
+        <BarcodePOS
+          store={store}
+          onClose={() => setShowBarcodePOS(false)}
+          onCheckout={(cart) => {
+            console.log('POS Checkout:', cart);
+            setShowBarcodePOS(false);
+            // You can integrate with your checkout flow here
+            alert(`Checkout: ${cart.item_count} items, Total: KES ${cart.total_amount.toLocaleString()}`);
+          }}
+        />
+      )}
+
       {/* Demo Lock Modal */}
       {showDemoLockModal && (
         <DemoLockModal
@@ -1550,6 +1621,22 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
             onExitDemo?.();
           }}
           hookType={demoLockType}
+        />
+      )}
+
+      {/* INVENTORY ENTRY HUB - NEW UNIFIED ADD ITEMS VIEW FOR STAFF */}
+      {showInventoryHub && (
+        <InventoryEntryHub
+          storeId={store.id}
+          existingInventory={inventory}
+          userRole="STAFF"
+          onItemsAdded={(items) => {
+            // Reload inventory after adding items
+            if (!isDemoMode) {
+              fetchInventory(store.id).then(invData => setInventory(invData));
+            }
+          }}
+          onClose={() => setShowInventoryHub(false)}
         />
       )}
 
