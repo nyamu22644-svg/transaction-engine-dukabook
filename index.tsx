@@ -20,8 +20,8 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
+// Disabled StrictMode to prevent camera double-mounting on React 18
+// This was causing "Invalid URI" errors when initializing the barcode scanner
 root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <App />
 );
