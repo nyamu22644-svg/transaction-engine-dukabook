@@ -1535,7 +1535,7 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
       {/* Barcode Scanner for Staff Add */}
       {showScanner && (
         <BarcodeScanner
-          onScan={handleBarcodeScan}
+          onDetected={handleBarcodeScan}
           onClose={() => setShowScanner(false)}
         />
       )}

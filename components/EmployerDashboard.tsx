@@ -25,7 +25,7 @@ import {
   SuccessStoryPopup,
   InlineFeatureTeaser 
 } from './ui/PremiumNudge';
-import { getStoreSubscription, getEffectiveTier } from '../services/billingService';
+import { getStoreSubscription, getEffectiveTier, calculateDaysRemaining } from '../services/billingService';
 import { THEME_COLORS, DEFAULT_THEME, BUSINESS_CONFIG } from '../constants';
 import { DEMO_INVENTORY, DEMO_SALES, DEMO_DEBTORS } from '../demoData';
 import { searchCatalog } from '../data/itemTemplates';
@@ -1147,7 +1147,7 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
       {/* Barcode Scanner Modal */}
       {showScanner && (
         <BarcodeScanner
-          onScan={handleBarcodeScan}
+          onDetected={handleBarcodeScan}
           onClose={() => setShowScanner(false)}
         />
       )}

@@ -17,6 +17,7 @@ import {
   updatePaymentConfig,
   getMarketingConfig,
   updateMarketingConfig,
+  calculateDaysRemaining,
 } from '../services/billingService';
 import { getSubscriptionFeatures, createSubscriptionFeature, updateSubscriptionFeature, deleteSubscriptionFeature } from '../services/featureService';
 import { StoreSubscription, StoreProfile, SubscriptionPlan, BillingDashboardStats, PaymentConfig, MarketingConfig, SubscriptionFeature } from '../types';
@@ -96,14 +97,12 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
 
   const handleSendReminder = async (sub: StoreSubscription & { store: StoreProfile }) => {
     setSendingReminder(sub.id);
-    const daysLeft = Math.ceil(
-      (new Date(sub.current_period_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    );
+    const daysLeft = calculateDaysRemaining(sub.expires_at);
     
     let reminderType: 'TRIAL_ENDING' | 'PAYMENT_DUE' | 'OVERDUE' | 'SUSPENDED' = 'PAYMENT_DUE';
     if (sub.is_trial) reminderType = 'TRIAL_ENDING';
     else if (daysLeft < 0) reminderType = 'OVERDUE';
-    else if (sub.status === 'SUSPENDED') reminderType = 'SUSPENDED';
+    else if (sub.status === 'expired') reminderType = 'SUSPENDED';
 
     const success = await sendPaymentReminder(sub.store, sub, reminderType);
     alert(success ? 'Reminder sent!' : 'Failed to send reminder');
@@ -225,7 +224,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
   };
 
   const getDaysUntilExpiry = (endDate: string): number => {
-    return Math.ceil((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return calculateDaysRemaining(endDate);
   };
 
   if (loading) {
@@ -481,8 +480,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
                 <h3 className="text-lg font-bold text-white mb-4">All Subscriptions ({subscriptions.length})</h3>
                 <div className="space-y-3 max-h-[500px] overflow-y-auto">
                   {subscriptions.map(sub => {
-                    const plan = plans.find(p => p.id === sub.plan_id);
-                    const daysLeft = getDaysUntilExpiry(sub.current_period_end);
+                    const daysLeft = getDaysUntilExpiry(sub.expires_at);
                     
                     return (
                       <div key={sub.id} className="bg-slate-800 p-4 rounded-xl flex items-center gap-4">
@@ -495,18 +493,18 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
                             </span>
                           </div>
                           <div className="text-sm text-slate-400">
-                            {plan?.name || sub.plan_id} • {sub.billing_cycle}
+                            {sub.plan_name}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">
-                            {sub.is_trial ? 'Trial ends' : 'Renews'}: {formatDate(sub.current_period_end)}
+                            {sub.is_trial ? 'Trial ends' : 'Renews'}: {formatDate(sub.expires_at)}
                             {daysLeft > 0 && <span className="text-slate-400"> ({daysLeft} days)</span>}
                             {daysLeft <= 0 && <span className="text-red-400"> (Overdue {Math.abs(daysLeft)} days)</span>}
                           </div>
                         </div>
                         
                         <div className="text-right flex-shrink-0">
-                          <div className="font-bold text-green-400">{formatCurrency(plan?.price_kes || 0)}</div>
-                          <div className="text-xs text-slate-500">/{sub.billing_cycle.toLowerCase()}</div>
+                          <div className="font-bold text-green-400">{formatCurrency(0)}</div>
+                          <div className="text-xs text-slate-500">/{sub.plan_name}</div>
                         </div>
 
                         <button
@@ -539,11 +537,11 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
                 </h3>
                 <div className="space-y-3 max-h-[500px] overflow-y-auto">
                   {subscriptions
-                    .filter(s => getDaysUntilExpiry(s.current_period_end) <= 7 || s.status === 'EXPIRED' || s.status === 'SUSPENDED')
-                    .sort((a, b) => getDaysUntilExpiry(a.current_period_end) - getDaysUntilExpiry(b.current_period_end))
+                    .filter(s => getDaysUntilExpiry(s.expires_at) <= 7 || s.status === 'expired' || s.status === 'cancelled')
+                    .sort((a, b) => getDaysUntilExpiry(a.expires_at) - getDaysUntilExpiry(b.expires_at))
                     .map(sub => {
-                      const daysLeft = getDaysUntilExpiry(sub.current_period_end);
-                      const plan = plans.find(p => p.id === sub.plan_id);
+                      const daysLeft = getDaysUntilExpiry(sub.expires_at);
+                      const plan = plans.find(p => p.name.includes(sub.plan_name));
                       
                       return (
                         <div key={sub.id} className={`p-4 rounded-xl flex items-center gap-4 ${
@@ -565,7 +563,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
                               {sub.store?.phone || sub.store?.email || 'No contact'}
                             </div>
                             <div className="text-xs text-slate-500">
-                              {daysLeft < 0 ? `Overdue since ${formatDate(sub.current_period_end)}` : `Expires ${formatDate(sub.current_period_end)}`}
+                              {daysLeft < 0 ? `Overdue since ${formatDate(sub.expires_at)}` : `Expires ${formatDate(sub.expires_at)}`}
                             </div>
                           </div>
 
@@ -593,7 +591,7 @@ export const BillingDashboard: React.FC<BillingDashboardProps> = ({ onClose }) =
                         </div>
                       );
                     })}
-                  {subscriptions.filter(s => getDaysUntilExpiry(s.current_period_end) <= 7 || s.status === 'EXPIRED').length === 0 && (
+                  {subscriptions.filter(s => getDaysUntilExpiry(s.expires_at) <= 7 || s.status === 'expired').length === 0 && (
                     <div className="text-center py-8">
                       <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
                       <p className="text-green-400 font-medium">All Clear!</p>

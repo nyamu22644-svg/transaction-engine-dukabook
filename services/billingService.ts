@@ -90,6 +90,27 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 export const TRIAL_DURATION_DAYS = 7; // 7-day free trial (only for registered stores)
 export const GRACE_PERIOD_DAYS = 3; // 3 days after expiry before suspension
 
+// ============================================================================
+// UTILITY: Calculate days remaining - SINGLE SOURCE OF TRUTH
+// ============================================================================
+/**
+ * Calculate days remaining until expiry date
+ * Uses Math.floor() for precision (always rounds down)
+ * This is the ONLY function that should be used for days calculation
+ */
+export const calculateDaysRemaining = (expiresAt: string | Date): number => {
+  try {
+    const now = new Date();
+    const expiryDate = new Date(expiresAt);
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const daysLeft = Math.floor((expiryDate.getTime() - now.getTime()) / msPerDay);
+    return Math.max(0, daysLeft); // Never negative
+  } catch (err) {
+    console.error('Error calculating days remaining:', err);
+    return 0;
+  }
+};
+
 // Helper to get current plans (dynamic from localStorage or default)
 const getCurrentPlans = (): SubscriptionPlan[] => {
   const savedPlans = localStorage.getItem('dukabook_subscription_plans');
@@ -143,29 +164,10 @@ export const getEffectiveTierSync = (storeId: string): {
     }
 
     const now = new Date();
-    const plans = getCurrentPlans();
-    const plan = plans.find(p => p.id === subscription.plan_id);
-    const planTier = plan?.tier || 'BASIC';
+    const expiresAt = new Date(subscription.expires_at);
 
-    // Check trial
-    if (subscription.is_trial && subscription.trial_end) {
-      const trialEnd = new Date(subscription.trial_end);
-      const trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-      
-      if (now < trialEnd) {
-        return {
-          tier: 'TRIAL',
-          isTrialActive: true,
-          trialDaysLeft,
-          hasFullAccess: true,
-          canAccessPremiumFeatures: true,
-        };
-      }
-    }
-
-    // Check if active
-    const periodEnd = new Date(subscription.current_period_end);
-    if (now > periodEnd) {
+    // Check if subscription is expired
+    if (subscription.status === 'expired' || subscription.status === 'cancelled') {
       return {
         tier: 'EXPIRED',
         isTrialActive: false,
@@ -175,12 +177,43 @@ export const getEffectiveTierSync = (storeId: string): {
       };
     }
 
+    // Check if expired based on expires_at
+    if (now > expiresAt) {
+      return {
+        tier: 'EXPIRED',
+        isTrialActive: false,
+        trialDaysLeft: 0,
+        hasFullAccess: false,
+        canAccessPremiumFeatures: false,
+      };
+    }
+
+    // Check trial
+    const daysLeft = calculateDaysRemaining(subscription.expires_at);
+    if (subscription.is_trial && subscription.status === 'active') {
+      return {
+        tier: 'TRIAL',
+        isTrialActive: true,
+        trialDaysLeft: daysLeft,
+        hasFullAccess: true,
+        canAccessPremiumFeatures: true,
+      };
+    }
+
+    // Map plan_name to tier
+    const tierMap: { [key: string]: 'BASIC' | 'PREMIUM' } = {
+      'free_trial': 'BASIC',
+      'basic': 'BASIC',
+      'premium': 'PREMIUM',
+    };
+    const tier = tierMap[subscription.plan_name] || 'BASIC';
+
     return {
-      tier: planTier,
+      tier,
       isTrialActive: false,
       trialDaysLeft: 0,
-      hasFullAccess: planTier === 'PREMIUM',
-      canAccessPremiumFeatures: planTier === 'PREMIUM',
+      hasFullAccess: tier === 'PREMIUM',
+      canAccessPremiumFeatures: tier === 'PREMIUM',
     };
   } catch {
     return {
@@ -234,20 +267,16 @@ export const createTrialSubscription = async (
   }
 
   const now = new Date();
-  const trialEnd = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
 
   const subscription: Omit<StoreSubscription, 'id' | 'created_at' | 'updated_at'> = {
     store_id: storeId,
-    plan_id: planId,
-    status: 'TRIAL',
-    billing_cycle: plan.billing_cycle,
-    current_period_start: now.toISOString(),
-    current_period_end: trialEnd.toISOString(),
-    trial_start: now.toISOString(),
-    trial_end: trialEnd.toISOString(),
+    status: 'active',
+    expires_at: expiresAt.toISOString(),
+    plan_name: 'free_trial',
     is_trial: true,
-    auto_renew: true,
-    next_billing_date: trialEnd.toISOString(),
+    payment_ref: undefined,
+    payment_method: undefined,
   };
 
   try {
@@ -302,7 +331,7 @@ export const getStoreSubscription = async (storeId: string): Promise<StoreSubscr
  * - 'TRIAL': Store is in free 7-day trial (no tier yet, full feature access)
  * - 'BASIC': Store has active BASIC subscription
  * - 'PREMIUM': Store has active PREMIUM subscription  
- * - 'EXPIRED': Subscription expired, in grace period
+ * - 'EXPIRED': Subscription expired
  * - 'NONE': No subscription at all
  */
 export const getEffectiveTier = async (storeId: string): Promise<{
@@ -314,31 +343,61 @@ export const getEffectiveTier = async (storeId: string): Promise<{
   hasFullAccess: boolean; // Trial & Premium get full access
   canAccessPremiumFeatures: boolean;
 }> => {
-  // First, check subscription table for active trial — trials should take precedence
+  // First, check subscription table for active subscription
   const subscription = await getStoreSubscription(storeId);
 
-  // If there's a trial subscription active, return TRIAL regardless of store.tier default
-  if (subscription && subscription.is_trial && subscription.trial_end) {
-    try {
-      const now = new Date();
-      const trialEnd = new Date(subscription.trial_end);
-      if (now < trialEnd) {
-        return {
-          tier: 'TRIAL',
-          isTrialActive: true,
-          trialDaysLeft: Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))),
-          subscriptionStatus: 'TRIAL',
-          subscription,
-          hasFullAccess: true,
-          canAccessPremiumFeatures: true,
-        };
-      }
-    } catch (e) {
-      console.error('Error evaluating trial subscription:', e);
+  // If there's a subscription, check if it's still active
+  if (subscription) {
+    const now = new Date();
+    const expiresAt = new Date(subscription.expires_at);
+    
+    // Check status field and expiration
+    if (subscription.status !== 'active' || now > expiresAt) {
+      return {
+        tier: 'EXPIRED',
+        isTrialActive: false,
+        trialDaysLeft: 0,
+        subscriptionStatus: subscription.status as SubscriptionStatus,
+        subscription,
+        hasFullAccess: false,
+        canAccessPremiumFeatures: false,
+      };
     }
+
+    // If it's a trial, return TRIAL tier
+    if (subscription.is_trial) {
+      const daysLeft = calculateDaysRemaining(subscription.expires_at);
+      return {
+        tier: 'TRIAL',
+        isTrialActive: true,
+        trialDaysLeft: daysLeft,
+        subscriptionStatus: 'TRIAL',
+        subscription,
+        hasFullAccess: true,
+        canAccessPremiumFeatures: true,
+      };
+    }
+
+    // Map plan_name to tier
+    const tierMap: { [key: string]: 'BASIC' | 'PREMIUM' } = {
+      'free_trial': 'BASIC',
+      'basic': 'BASIC',
+      'premium': 'PREMIUM',
+    };
+    const planTier = tierMap[subscription.plan_name] || 'BASIC';
+
+    return {
+      tier: planTier,
+      isTrialActive: false,
+      trialDaysLeft: 0,
+      subscriptionStatus: 'ACTIVE',
+      subscription,
+      hasFullAccess: planTier === 'PREMIUM',
+      canAccessPremiumFeatures: planTier === 'PREMIUM',
+    };
   }
 
-  // Next: Check if SuperAdmin manually set a tier on the store (manual override)
+  // Check if SuperAdmin manually set a tier on the store (manual override)
   if (isSupabaseEnabled && supabase) {
     try {
       const { data: store } = await supabase
@@ -352,8 +411,8 @@ export const getEffectiveTier = async (storeId: string): Promise<{
           tier: store.tier,
           isTrialActive: false,
           trialDaysLeft: 0,
-          subscriptionStatus: subscription ? 'ACTIVE' : null,
-          subscription: subscription || null,
+          subscriptionStatus: 'ACTIVE',
+          subscription: null,
           hasFullAccess: true, // Manual tier grants full access
           canAccessPremiumFeatures: store.tier === 'PREMIUM',
         };
@@ -364,81 +423,14 @@ export const getEffectiveTier = async (storeId: string): Promise<{
   }
   
   // No subscription at all
-  if (!subscription) {
-    return {
-      tier: 'NONE',
-      isTrialActive: false,
-      trialDaysLeft: 0,
-      subscriptionStatus: null,
-      subscription: null,
-      hasFullAccess: false,
-      canAccessPremiumFeatures: false,
-    };
-  }
-
-  const now = new Date();
-  const plans = getCurrentPlans();
-  const plan = plans.find(p => p.id === subscription.plan_id);
-  const planTier = plan?.tier || 'BASIC';
-
-  // Check if in trial
-  if (subscription.is_trial && subscription.trial_end) {
-    const trialEnd = new Date(subscription.trial_end);
-    const trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-    
-    if (now < trialEnd) {
-      return {
-        tier: 'TRIAL',
-        isTrialActive: true,
-        trialDaysLeft,
-        subscriptionStatus: 'TRIAL',
-        subscription,
-        hasFullAccess: true, // Trial users get full access to try everything
-        canAccessPremiumFeatures: true,
-      };
-    }
-  }
-
-  // Check subscription status
-  const periodEnd = new Date(subscription.current_period_end);
-  
-  if (subscription.status === 'SUSPENDED' || subscription.status === 'CANCELLED') {
-    return {
-      tier: 'EXPIRED',
-      isTrialActive: false,
-      trialDaysLeft: 0,
-      subscriptionStatus: subscription.status,
-      subscription,
-      hasFullAccess: false,
-      canAccessPremiumFeatures: false,
-    };
-  }
-
-  if (now > periodEnd) {
-    // Check grace period
-    const graceEnd = subscription.grace_period_end ? new Date(subscription.grace_period_end) : null;
-    if (!graceEnd || now > graceEnd) {
-      return {
-        tier: 'EXPIRED',
-        isTrialActive: false,
-        trialDaysLeft: 0,
-        subscriptionStatus: 'EXPIRED',
-        subscription,
-        hasFullAccess: false,
-        canAccessPremiumFeatures: false,
-      };
-    }
-  }
-
-  // Active subscription
   return {
-    tier: planTier,
+    tier: 'NONE',
     isTrialActive: false,
     trialDaysLeft: 0,
-    subscriptionStatus: subscription.status,
-    subscription,
-    hasFullAccess: planTier === 'PREMIUM',
-    canAccessPremiumFeatures: planTier === 'PREMIUM',
+    subscriptionStatus: null,
+    subscription: null,
+    hasFullAccess: false,
+    canAccessPremiumFeatures: false,
   };
 };
 
@@ -450,27 +442,23 @@ export const checkSubscriptionStatus = async (storeId: string): Promise<Subscrip
   if (!subscription) return 'EXPIRED';
 
   const now = new Date();
-  const periodEnd = new Date(subscription.current_period_end);
-  const graceEnd = subscription.grace_period_end ? new Date(subscription.grace_period_end) : null;
+  const expiresAt = new Date(subscription.expires_at);
 
-  // Check if still in trial
-  if (subscription.is_trial && subscription.trial_end) {
-    const trialEnd = new Date(subscription.trial_end);
-    if (now < trialEnd) return 'TRIAL';
+  // Check subscription status - if expired or cancelled, return EXPIRED
+  if (subscription.status === 'expired' || subscription.status === 'cancelled' || now > expiresAt) {
+    return 'EXPIRED';
   }
 
-  // Check if active
-  if (now < periodEnd) return 'ACTIVE';
-
-  // Check grace period
-  if (graceEnd && now < graceEnd) return 'EXPIRED'; // Still in grace, but technically expired
-
-  // Past grace period - suspend
-  if (subscription.status !== 'SUSPENDED') {
-    await updateSubscriptionStatus(subscription.id, 'SUSPENDED');
+  // Active but check if in trial
+  if (subscription.status === 'active') {
+    if (subscription.is_trial) {
+      return 'TRIAL';
+    }
+    return 'ACTIVE';
   }
 
-  return 'SUSPENDED';
+  // Default to expired if unknown status
+  return 'EXPIRED';
 };
 
 /**
@@ -499,37 +487,37 @@ export const updateSubscriptionStatus = async (
  */
 export const activateSubscription = async (
   subscriptionId: string,
-  billingCycle: BillingCycle
+  planName: string,
+  billingCycle: string = 'monthly'
 ): Promise<boolean> => {
   if (!isSupabaseEnabled) return false;
 
   const now = new Date();
-  let periodEnd: Date;
+  let expiresAt: Date;
 
-  switch (billingCycle) {
+  // Calculate expiration based on billing cycle
+  switch (billingCycle.toUpperCase()) {
     case 'MONTHLY':
-      periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
+      expiresAt = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
       break;
     case 'QUARTERLY':
-      periodEnd = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate());
+      expiresAt = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate());
       break;
     case 'YEARLY':
-      periodEnd = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+      expiresAt = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
       break;
+    default:
+      expiresAt = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
   }
-
-  const graceEnd = new Date(periodEnd.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
 
   try {
     const { error } = await supabase!
       .from('subscriptions')
       .update({
-        status: 'ACTIVE',
+        status: 'active',
         is_trial: false,
-        current_period_start: now.toISOString(),
-        current_period_end: periodEnd.toISOString(),
-        next_billing_date: periodEnd.toISOString(),
-        grace_period_end: graceEnd.toISOString(),
+        plan_name: planName,
+        expires_at: expiresAt.toISOString(),
         updated_at: now.toISOString(),
       })
       .eq('id', subscriptionId);
@@ -537,6 +525,219 @@ export const activateSubscription = async (
     return !error;
   } catch {
     return false;
+  }
+};
+
+/**
+ * Set tier for a store via admin - creates/updates subscription as PAID
+ * This records the payment as admin-manual and counts toward revenue
+ */
+export const undoAdminTierUpgrade = async (storeId: string): Promise<{ success: boolean; message: string }> => {
+  if (!isSupabaseEnabled) return { success: false, message: 'Supabase not enabled' };
+
+  try {
+    // Get the subscription to check if it was originally a trial
+    const { data: subscription, error: subError } = await supabase!
+      .from('subscriptions')
+      .select('*')
+      .eq('store_id', storeId)
+      .single();
+
+    if (subError || !subscription) {
+      return { success: false, message: 'Subscription not found' };
+    }
+
+    const wasTrialBefore = subscription.is_trial;
+
+    // Delete the admin manual payment record
+    const { error: paymentError } = await supabase!
+      .from('payment_history')
+      .delete()
+      .eq('store_id', storeId)
+      .eq('payment_method', 'ADMIN_MANUAL')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (paymentError) {
+      console.error('Error deleting payment:', paymentError);
+    }
+
+    // Restore subscription to original state
+    let subscriptionUpdate: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (wasTrialBefore) {
+      // Restore to trial state
+      const now = new Date();
+      const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      subscriptionUpdate = {
+        ...subscriptionUpdate,
+        status: 'active',
+        is_trial: true,
+        plan_name: 'free_trial',
+        expires_at: trialEnd.toISOString(),
+        payment_method: null,
+        payment_ref: null,
+        last_payment_date: null,
+      };
+    } else {
+      // Just cancel it
+      subscriptionUpdate.status = 'cancelled';
+    }
+
+    const { error: updateError } = await supabase!
+      .from('subscriptions')
+      .update(subscriptionUpdate)
+      .eq('id', subscription.id);
+
+    if (updateError) {
+      return { success: false, message: 'Failed to restore subscription' };
+    }
+
+    // Revert store tier to BASIC
+    const { error: storeError } = await supabase!
+      .from('stores')
+      .update({
+        tier: 'BASIC',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', storeId);
+
+    if (storeError) {
+      console.error('Error reverting store tier:', storeError);
+      return { success: false, message: 'Failed to revert store tier' };
+    }
+
+    const message = wasTrialBefore 
+      ? 'Tier upgrade undone - restored to free trial'
+      : 'Tier upgrade undone - subscription cancelled';
+
+    return { success: true, message };
+  } catch (err) {
+    console.error('Error in undoAdminTierUpgrade:', err);
+    return { success: false, message: 'Error undoing tier upgrade' };
+  }
+};
+
+export const setStoreTierAdmin = async (
+  storeId: string,
+  tier: 'BASIC' | 'PREMIUM',
+  durationMonths: number = 12
+): Promise<{ success: boolean; subscription?: StoreSubscription }> => {
+  if (!isSupabaseEnabled) return { success: false };
+
+  try {
+    const now = new Date();
+    const expiresAt = new Date(now.getFullYear(), now.getMonth() + durationMonths, now.getDate());
+
+    // Map tier to plan_name and price
+    const planMap: { [key: string]: { name: string; price: number } } = {
+      'BASIC': { name: 'basic', price: 0 }, // Basic is free
+      'PREMIUM': { name: 'premium', price: 2999 }, // Premium is 2999 KES
+    };
+    const planConfig = planMap[tier] || planMap['BASIC'];
+    const planName = planConfig.name;
+    const amount = planConfig.price;
+
+    // Check if subscription already exists
+    const { data: existingSub } = await supabase!
+      .from('subscriptions')
+      .select('*')
+      .eq('store_id', storeId)
+      .single();
+
+    if (existingSub) {
+      // Update existing subscription
+      const { data, error } = await supabase!
+        .from('subscriptions')
+        .update({
+          status: 'active',
+          is_trial: false,
+          plan_name: planName,
+          expires_at: expiresAt.toISOString(),
+          payment_method: 'ADMIN_MANUAL',
+          payment_ref: `admin-tier-${tier}-${now.getTime()}`,
+          last_payment_date: now.toISOString(),
+          updated_at: now.toISOString(),
+        })
+        .eq('id', existingSub.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating subscription:', error);
+        return { success: false };
+      }
+
+      // Record payment in payment_history
+      if (amount > 0) {
+        const { error: paymentError } = await supabase!
+          .from('payment_history')
+          .insert({
+            store_id: storeId,
+            amount: amount,
+            currency: 'KES',
+            payment_method: 'ADMIN_MANUAL',
+            status: 'COMPLETED',
+            plan_id: tier,
+            notes: `Admin manual tier upgrade to ${tier} for ${durationMonths} months`,
+          });
+
+        if (paymentError) {
+          console.error('Error recording admin payment:', paymentError);
+          // Don't fail the subscription update if payment record fails
+        }
+      }
+
+      return { success: true, subscription: data as StoreSubscription };
+    } else {
+      // Create new subscription
+      const { data, error } = await supabase!
+        .from('subscriptions')
+        .insert({
+          store_id: storeId,
+          status: 'active',
+          is_trial: false,
+          plan_name: planName,
+          expires_at: expiresAt.toISOString(),
+          payment_method: 'ADMIN_MANUAL',
+          payment_ref: `admin-tier-${tier}-${now.getTime()}`,
+          last_payment_date: now.toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating subscription:', error);
+        return { success: false };
+      }
+
+      // Record payment in payment_history
+      if (amount > 0) {
+        const { error: paymentError } = await supabase!
+          .from('payment_history')
+          .insert({
+            store_id: storeId,
+            amount: amount,
+            currency: 'KES',
+            payment_method: 'ADMIN_MANUAL',
+            status: 'COMPLETED',
+            plan_id: tier,
+            notes: `Admin manual tier upgrade to ${tier} for ${durationMonths} months`,
+          });
+
+        if (paymentError) {
+          console.error('Error recording admin payment:', paymentError);
+          // Don't fail the subscription creation if payment record fails
+        }
+      }
+
+      return { success: true, subscription: data as StoreSubscription };
+    }
+  } catch (err) {
+    console.error('Error in setStoreTierAdmin:', err);
+    return { success: false };
   }
 };
 
@@ -594,30 +795,26 @@ export const sendPaymentReminder = async (
   const phone = store.phone || store.email; // Fallback
   if (!phone) return false;
 
-  const plans = getCurrentPlans();
-  const plan = plans.find(p => p.id === subscription.plan_id);
-  const amount = plan?.price_kes || 0;
-  const daysLeft = Math.ceil(
-    (new Date(subscription.current_period_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  );
+  const daysLeft = calculateDaysRemaining(subscription.expires_at);
 
   let message = '';
+  let amount = 0; // Could fetch from plan_name mapping if needed
 
   switch (reminderType) {
     case 'TRIAL_ENDING':
       message = `Hi ${store.name}! Your DukaBook FREE trial ends in ${daysLeft} days. Upgrade to Premium for just KES ${amount}/month to keep all features. Pay via M-Pesa to 174379. Reply UPGRADE for help.`;
       break;
     case 'PAYMENT_DUE':
-      message = `Reminder: Your DukaBook subscription (KES ${amount}) is due in ${daysLeft} days. Pay via M-Pesa to 174379 Acc: ${store.access_code}. Keep your business running smoothly!`;
+      message = `Reminder: Your DukaBook subscription is due in ${daysLeft} days. Pay via M-Pesa to 174379 Acc: ${store.access_code}. Keep your business running smoothly!`;
       break;
     case 'OVERDUE':
-      message = `URGENT: Your DukaBook subscription is overdue! Pay KES ${amount} now to avoid service interruption. M-Pesa: 174379 Acc: ${store.access_code}. Grace period: ${GRACE_PERIOD_DAYS} days.`;
+      message = `URGENT: Your DukaBook subscription is overdue! Please pay now to avoid service interruption. M-Pesa: 174379 Acc: ${store.access_code}.`;
       break;
     case 'FINAL_WARNING':
-      message = `FINAL WARNING: DukaBook will be suspended tomorrow if payment of KES ${amount} is not received. M-Pesa: 174379 Acc: ${store.access_code}. Pay now to continue!`;
+      message = `FINAL WARNING: DukaBook will be suspended if payment is not received. M-Pesa: 174379 Acc: ${store.access_code}. Pay now to continue!`;
       break;
     case 'SUSPENDED':
-      message = `Your DukaBook account has been suspended due to non-payment. Pay KES ${amount} via M-Pesa 174379 Acc: ${store.access_code} to reactivate immediately.`;
+      message = `Your DukaBook account has been suspended due to non-payment. Pay via M-Pesa 174379 Acc: ${store.access_code} to reactivate immediately.`;
       break;
   }
 
@@ -677,18 +874,18 @@ export const getBillingDashboardStats = async (): Promise<BillingDashboardStats 
     const monthlyPayments = paidPayments.filter(p => new Date(p.paid_at!) >= monthStart);
     const monthlyRecurring = monthlyPayments.reduce((sum, p) => sum + p.amount, 0);
 
-    const activeSubs = subs.filter(s => s.status === 'ACTIVE');
-    const trialSubs = subs.filter(s => s.status === 'TRIAL');
-    const expiredSubs = subs.filter(s => s.status === 'EXPIRED' || s.status === 'SUSPENDED');
+    const activeSubs = subs.filter(s => s.status === 'active');
+    const trialSubs = subs.filter(s => s.is_trial && s.status === 'active');
+    const expiredSubs = subs.filter(s => s.status === 'expired' || s.status === 'cancelled');
 
     const expiringSoon = subs.filter(s => {
-      const endDate = new Date(s.current_period_end);
-      return s.status === 'ACTIVE' && endDate <= sevenDaysFromNow && endDate > now;
+      const expiresAt = new Date(s.expires_at);
+      return s.status === 'active' && expiresAt <= sevenDaysFromNow && expiresAt > now;
     });
 
     const recentlyExpired = subs.filter(s => {
-      const endDate = new Date(s.current_period_end);
-      return endDate >= sevenDaysAgo && endDate < now;
+      const expiresAt = new Date(s.expires_at);
+      return expiresAt >= sevenDaysAgo && expiresAt < now;
     });
 
     // Pending payments
@@ -703,13 +900,13 @@ export const getBillingDashboardStats = async (): Promise<BillingDashboardStats 
     // Calculate churn rate (expired in last 30 days / total at start of period)
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const expiredLast30Days = subs.filter(s => 
-      s.status === 'EXPIRED' && s.updated_at && new Date(s.updated_at) >= thirtyDaysAgo
+      s.status === 'expired' && s.updated_at && new Date(s.updated_at) >= thirtyDaysAgo
     ).length;
     const churnRate = subs.length > 0 ? (expiredLast30Days / subs.length) * 100 : 0;
 
     // Trial to paid conversion
     const convertedTrials = subs.filter(s => 
-      !s.is_trial && s.trial_end && new Date(s.trial_end) >= thirtyDaysAgo
+      !s.is_trial && s.created_at && new Date(s.created_at) >= thirtyDaysAgo
     ).length;
     const totalTrials = trialSubs.length + convertedTrials;
     const conversionRate = totalTrials > 0 ? (convertedTrials / totalTrials) * 100 : 0;
@@ -721,7 +918,7 @@ export const getBillingDashboardStats = async (): Promise<BillingDashboardStats 
       trial_subscriptions: trialSubs.length,
       expired_subscriptions: expiredSubs.length,
       pending_payments: pending.length,
-      overdue_payments: subs.filter(s => s.status === 'EXPIRED').length,
+      overdue_payments: subs.filter(s => s.status === 'expired').length,
       churn_rate: Math.round(churnRate * 10) / 10,
       conversion_rate: Math.round(conversionRate * 10) / 10,
       avg_revenue_per_store: activeSubs.length > 0 ? totalRevenue / activeSubs.length : 0,
@@ -792,14 +989,13 @@ export const processSubscriptionReminders = async (): Promise<{
     const { data: subscriptions } = await supabase!
       .from('subscriptions')
       .select('*, stores(*)')
-      .in('status', ['TRIAL', 'ACTIVE', 'EXPIRED']);
+      .eq('status', 'active');
 
     const now = new Date();
 
     for (const sub of subscriptions || []) {
       const store = sub.stores as StoreProfile;
-      const endDate = new Date(sub.current_period_end);
-      const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const daysLeft = calculateDaysRemaining(sub.expires_at);
 
       // Trial ending in 3 days
       if (sub.is_trial && daysLeft === 3) {
@@ -826,10 +1022,9 @@ export const processSubscriptionReminders = async (): Promise<{
           reminded++;
         }
       }
-      // Past grace period - suspend
-      else if (daysLeft < -GRACE_PERIOD_DAYS && sub.status !== 'SUSPENDED') {
-        await updateSubscriptionStatus(sub.id, 'SUSPENDED');
-        await sendPaymentReminder(store, sub, 'SUSPENDED');
+      // Past grace period - expire
+      else if (daysLeft < -GRACE_PERIOD_DAYS && sub.status !== 'expired') {
+        await updateSubscriptionStatus(sub.id, 'expired');
         
         // Also update store to suspended
         await supabase!
@@ -1139,6 +1334,8 @@ export default {
   getStoreSubscription,
   checkSubscriptionStatus,
   activateSubscription,
+  setStoreTierAdmin,
+  undoAdminTierUpgrade,
   sendPaymentReminder,
   getBillingDashboardStats,
   getAllSubscriptions,

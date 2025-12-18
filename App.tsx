@@ -149,6 +149,7 @@ const App: React.FC = () => {
 
   // --- ROUTING RENDER LOGIC ---
   console.log('Render state:', { isLoadingStore, isPaymentCallback, verificationId, isAdminMode, activeStore: activeStore?.name });
+  console.log('isAdminMode:', isAdminMode);
 
   if (isLoadingStore) {
     return (
@@ -158,6 +159,7 @@ const App: React.FC = () => {
             <Store className="w-6 h-6 text-blue-600" />
           </div>
           <p className="text-slate-600 font-medium">Loading DukaBook...</p>
+          <p className="text-slate-400 text-sm mt-2">This should only take a moment</p>
         </div>
       </div>
     );
@@ -168,11 +170,77 @@ const App: React.FC = () => {
   }
 
   if (isAdminMode) {
-    return <SuperAdminDashboard />;
+    console.log('Rendering SuperAdminDashboard...');
+    return (
+      <div className="min-h-screen bg-slate-900">
+        <SuperAdminDashboard />
+      </div>
+    );
   }
 
+  // If not loading but no active store, show login
   if (!activeStore) {
     return <StoreLogin onLogin={handleLogin} />;
+  }
+
+  // Check if store is suspended
+  if (activeStore.is_suspended) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
+            <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Lock className="w-8 h-8 text-amber-600" />
+            </div>
+            <h1 className="text-3xl font-bold text-slate-800 mb-2">Account Access Restricted</h1>
+            <p className="text-amber-600 font-semibold mb-6">Temporary Suspension</p>
+            
+            <div className="bg-slate-50 rounded-lg p-5 mb-6 text-left border-l-4 border-amber-500">
+              <p className="text-slate-600 mb-4">
+                We've temporarily restricted access to <strong>{activeStore.name}</strong> to protect your account.
+              </p>
+              {activeStore.suspension_reason && (
+                <div className="bg-white rounded p-3 mb-3 border border-slate-200">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Details</p>
+                  <p className="text-slate-700 text-sm">{activeStore.suspension_reason}</p>
+                </div>
+              )}
+              {activeStore.suspended_at && (
+                <p className="text-xs text-slate-500">
+                  Suspended on {new Date(activeStore.suspended_at).toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              )}
+            </div>
+
+            <p className="text-slate-600 text-sm mb-6 leading-relaxed">
+              Our support team is ready to help! We'll investigate this matter and work with you to resolve it quickly.
+            </p>
+
+            <div className="space-y-3 mb-4">
+              <a
+                href="mailto:support@dukabook.com?subject=Account Suspension - ${activeStore.name}"
+                className="block w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg transition shadow-md"
+              >
+                Contact Support
+              </a>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('dukabook_active_store_v1');
+                  setActiveStore(null);
+                }}
+                className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-lg transition"
+              >
+                Logout
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 text-center">
+              📧 support@dukabook.com | ☎️ Available 24/7
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // --- THEME ---

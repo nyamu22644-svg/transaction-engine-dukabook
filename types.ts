@@ -58,6 +58,9 @@ export interface StoreProfile {
   currency: string;
   timezone?: string;
   is_active?: boolean;
+  is_suspended?: boolean;
+  suspension_reason?: string;
+  suspended_at?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -397,7 +400,7 @@ export interface BusinessConfig {
 // ============================================================================
 
 export type BillingCycle = 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
-export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'CANCELLED';
+export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'active' | 'expired' | 'cancelled';
 export type PaymentMethod = 'MPESA' | 'BANK_TRANSFER' | 'CARD' | 'CASH';
 export type MpesaTransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
@@ -417,19 +420,20 @@ export interface SubscriptionPlan {
 export interface StoreSubscription {
   id: string;
   store_id: string;
-  plan_id: string;
-  status: SubscriptionStatus;
-  billing_cycle: BillingCycle;
-  current_period_start: string;
-  current_period_end: string;
-  trial_start?: string;
-  trial_end?: string;
+  // Status & Expiration (aligned with STRICT_SUBSCRIPTION_SCHEMA)
+  status: 'active' | 'expired' | 'cancelled';
+  expires_at: string; // Single expiration point (replaces trial_end and current_period_end)
+  
+  // Plan info
+  plan_name: string; // e.g., 'free_trial'
   is_trial: boolean;
-  auto_renew: boolean;
-  next_billing_date?: string;
-  cancelled_at?: string;
-  cancellation_reason?: string;
-  grace_period_end?: string; // 3 days after expiry before suspension
+  
+  // Payment Reference (from IntaSend/M-Pesa webhook)
+  payment_ref?: string;
+  payment_method?: string;
+  last_payment_date?: string;
+  
+  // Audit
   created_at: string;
   updated_at: string;
 }

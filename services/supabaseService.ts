@@ -1305,7 +1305,7 @@ export const suspendStore = async (storeId: string, reason?: string): Promise<bo
   try {
     const { error } = await supabase!.from('stores').update({ 
       is_suspended: true, 
-      suspension_reason: reason || 'Suspended by admin',
+      suspension_reason: reason || 'Account suspended by DukaBook technical team',
       suspended_at: new Date().toISOString()
     }).eq('id', storeId);
     return !error;

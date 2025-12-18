@@ -14,6 +14,7 @@ import {
   getStoreSubscription,
   getSubscriptionPlans,
   getPaymentConfig,
+  calculateDaysRemaining,
 } from '../services/billingService';
 import {
   initiateSTKPush,
@@ -91,17 +92,16 @@ export const SubscriptionPayment: React.FC<SubscriptionPaymentProps> = ({
     setSubscription(sub);
     setPlans(plansData);
     setPaymentConfig(configData);
-    if (sub?.plan_id) {
-      setSelectedPlan(sub.plan_id);
+    // Set default plan - use selectedPlan state instead
+    if (!selectedPlan) {
+      setSelectedPlan('premium-monthly');
     }
     setLoading(false);
   };
 
   const getDaysRemaining = (): number => {
     if (!subscription) return 0;
-    const endDate = new Date(subscription.current_period_end);
-    const now = new Date();
-    return Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    return calculateDaysRemaining(subscription.expires_at);
   };
 
   const getStatusInfo = () => {
@@ -111,16 +111,16 @@ export const SubscriptionPayment: React.FC<SubscriptionPaymentProps> = ({
     
     const days = getDaysRemaining();
     
-    if (subscription.status === 'SUSPENDED') {
-      return { status: 'suspended', label: 'Suspended', color: 'red' };
+    if (subscription.status === 'expired' || subscription.status === 'cancelled') {
+      return { status: 'expired', label: 'Expired', color: 'red' };
     }
     if (subscription.is_trial) {
       return { status: 'trial', label: `Trial (${days} days left)`, color: 'blue' };
     }
-    if (subscription.status === 'ACTIVE' && days > 7) {
+    if (subscription.status === 'active' && days > 7) {
       return { status: 'active', label: `Active (${days} days)`, color: 'green' };
     }
-    if (subscription.status === 'ACTIVE' && days <= 7) {
+    if (subscription.status === 'active' && days <= 7) {
       return { status: 'expiring', label: `Expiring in ${days} days`, color: 'yellow' };
     }
     return { status: 'expired', label: 'Expired', color: 'red' };
@@ -326,12 +326,12 @@ export const SubscriptionPayment: React.FC<SubscriptionPaymentProps> = ({
                       {statusInfo.label}
                     </span>
                     <span className="text-slate-400 ml-2">
-                      • {plans.find(p => p.id === subscription.plan_id)?.name || 'Unknown Plan'}
+                      • {subscription.plan_name || 'Unknown Plan'}
                     </span>
                   </div>
                 </div>
                 <div className="text-sm text-slate-400">
-                  Expires: {new Date(subscription.current_period_end).toLocaleDateString('en-KE')}
+                  Expires: {new Date(subscription.expires_at).toLocaleDateString('en-KE')}
                 </div>
               </div>
             </div>

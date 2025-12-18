@@ -45,20 +45,17 @@ export default defineConfig(({ mode }) => {
             ]
           },
           workbox: {
-            maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MB
+            maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
             globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
             runtimeCaching: [
               {
-                urlPattern: /^https:\/\/.*supabase\.co\/.*/i,
-                handler: 'NetworkFirst',
+                urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+                handler: 'CacheFirst',
                 options: {
-                  cacheName: 'supabase-cache',
+                  cacheName: 'google-fonts-cache',
                   expiration: {
-                    maxEntries: 100,
-                    maxAgeSeconds: 60 * 60 * 24 // 24 hours
-                  },
-                  cacheableResponse: {
-                    statuses: [0, 200]
+                    maxEntries: 20,
+                    maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
                   }
                 }
               }
@@ -66,18 +63,10 @@ export default defineConfig(({ mode }) => {
           }
         })
       ],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL),
-        'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY),
-        'import.meta.env.VITE_INTASEND_PUBLIC_KEY': JSON.stringify(env.VITE_INTASEND_PUBLIC_KEY || process.env.VITE_INTASEND_PUBLIC_KEY),
-        'import.meta.env.VITE_INTASEND_SECRET_KEY': JSON.stringify(env.VITE_INTASEND_SECRET_KEY || process.env.VITE_INTASEND_SECRET_KEY)
-      },
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
-      }
+          '@': path.resolve(__dirname, './src'),
+        },
+      },
     };
 });

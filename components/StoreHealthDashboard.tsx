@@ -39,7 +39,7 @@ export const StoreHealthDashboard: React.FC<StoreHealthDashboardProps> = ({ onCl
   const handleSuspend = async (storeId: string, storeName: string) => {
     if (!confirm(`Are you sure you want to SUSPEND "${storeName}"? They won't be able to access the system.`)) return;
     setActionLoading(storeId);
-    const success = await suspendStore(storeId, 'Suspended by SuperAdmin');
+    const success = await suspendStore(storeId, 'Account suspended by DukaBook technical team');
     if (success) {
       alert('Store suspended successfully');
       loadAnalytics();
@@ -514,6 +514,11 @@ const StoreRow: React.FC<{
         <div className="flex items-center gap-2">
           <span className="font-medium text-white truncate">{store.store.name}</span>
           {store.store.tier === 'PREMIUM' && <Crown className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+          {store.store.is_suspended && (
+            <span className="text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded flex-shrink-0 animate-pulse">
+              🔒 SUSPENDED
+            </span>
+          )}
           <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded flex-shrink-0">
             {store.store.business_type}
           </span>
@@ -553,7 +558,19 @@ const StoreRow: React.FC<{
         >
           <Eye className="w-4 h-4" />
         </button>
-        {store.isActive ? (
+        
+        {/* If store is suspended, show UNSUSPEND button */}
+        {store.store.is_suspended ? (
+          <button 
+            onClick={onActivate}
+            disabled={isLoading}
+            className="p-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg transition disabled:opacity-50"
+            title="Unsuspend Store"
+          >
+            {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+          </button>
+        ) : store.isActive ? (
+          /* Active store - show SUSPEND button */
           <button 
             onClick={onSuspend}
             disabled={isLoading}
@@ -563,6 +580,7 @@ const StoreRow: React.FC<{
             {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
           </button>
         ) : (
+          /* Inactive store - show ACTIVATE button */
           <button 
             onClick={onActivate}
             disabled={isLoading}

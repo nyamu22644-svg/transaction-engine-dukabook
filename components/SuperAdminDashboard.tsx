@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { StoreProfile, BusinessType, SubscriptionTier, StoreSubscription } from '../types';
 import { createNewStore, fetchAllStores, linkOwnerToStore, updateStore } from '../services/supabaseService';
-import { getAllSubscriptions, createTrialSubscription } from '../services/billingService';
-import { Plus, Copy, Building, MapPin, Key, ExternalLink, Lock, Crown, X, LayoutGrid, Mail, UserPlus, Edit3, Save, Activity, BarChart3, CreditCard, Clock, Sparkles, AlertTriangle, Wallet } from 'lucide-react';
+import { getAllSubscriptions, createTrialSubscription, setStoreTierAdmin, undoAdminTierUpgrade, calculateDaysRemaining } from '../services/billingService';
+import { Plus, Copy, Building, MapPin, Key, ExternalLink, Lock, Crown, X, LayoutGrid, Mail, UserPlus, Edit3, Save, Activity, BarChart3, CreditCard, Clock, Sparkles, AlertTriangle, Wallet, Undo, Bell, History } from 'lucide-react';
 import { StoreHealthDashboard } from './StoreHealthDashboard';
 import { BillingDashboard } from './BillingDashboard';
 import { C2BPaymentsManager } from './C2BPaymentsManager';
 import IntaSendPaymentHistory from './IntaSendPaymentHistory';
+import { ManualReminderPanel } from './ManualReminderPanel';
+import { ReminderHistoryPanel } from './ReminderHistoryPanel';
 
 // Type for store with subscription info
 interface StoreWithSubscription extends StoreProfile {
@@ -57,6 +59,7 @@ export const SuperAdminDashboard: React.FC = () => {
   const [tierStoreId, setTierStoreId] = useState('');
   const [tierStoreName, setTierStoreName] = useState('');
   const [newTier, setNewTier] = useState<'BASIC' | 'PREMIUM'>('BASIC');
+  const [tierDurationMonths, setTierDurationMonths] = useState(12);
   const [tierUpdating, setTierUpdating] = useState(false);
 
   // Health Dashboard State
@@ -67,6 +70,12 @@ export const SuperAdminDashboard: React.FC = () => {
   
   // C2B Payments Manager State
   const [showC2BManager, setShowC2BManager] = useState(false);
+
+  // Manual Reminder Panel State
+  const [showReminderPanel, setShowReminderPanel] = useState(false);
+
+  // Reminder History Panel State
+  const [showReminderHistory, setShowReminderHistory] = useState(false);
 
   const loadStores = async () => {
     const [storesData, subscriptionsData] = await Promise.all([
@@ -84,24 +93,29 @@ export const SuperAdminDashboard: React.FC = () => {
       if (store.tier && (store.tier === 'BASIC' || store.tier === 'PREMIUM')) {
         effectiveTier = store.tier as 'BASIC' | 'PREMIUM';
       } 
-      // Priority 2: Check subscription status
+      // Priority 2: Check subscription status (using new schema: status + expires_at)
       else if (sub) {
         const now = new Date();
-        const periodEnd = new Date(sub.current_period_end);
+        const expiresAt = new Date(sub.expires_at);
         
-        if (sub.is_trial && sub.trial_end) {
-          const trialEnd = new Date(sub.trial_end);
-          if (now < trialEnd) {
-            effectiveTier = 'TRIAL';
-            trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-          } else {
-            effectiveTier = 'EXPIRED';
-          }
-        } else if (sub.status === 'ACTIVE' && now < periodEnd) {
-          // Check plan tier
-          effectiveTier = sub.plan_id.includes('premium') ? 'PREMIUM' : 'BASIC';
-        } else if (sub.status === 'SUSPENDED' || sub.status === 'CANCELLED') {
+        // Check if expired based on status and expires_at
+        if (sub.status === 'expired' || sub.status === 'cancelled') {
           effectiveTier = 'EXPIRED';
+        } else if (now > expiresAt) {
+          // Also check date-based expiration
+          effectiveTier = 'EXPIRED';
+        } else if (sub.is_trial && sub.status === 'active') {
+          // Trial is still active
+          effectiveTier = 'TRIAL';
+          trialDaysLeft = calculateDaysRemaining(sub.expires_at);
+        } else if (sub.status === 'active') {
+          // Paid subscription - determine tier from plan_name
+          const tierMap: { [key: string]: 'BASIC' | 'PREMIUM' } = {
+            'free_trial': 'BASIC',
+            'basic': 'BASIC',
+            'premium': 'PREMIUM',
+          };
+          effectiveTier = tierMap[sub.plan_name] || 'BASIC';
         } else {
           effectiveTier = 'EXPIRED';
         }
@@ -244,19 +258,51 @@ export const SuperAdminDashboard: React.FC = () => {
     if (!tierStoreId) return;
     setTierUpdating(true);
     try {
-      const success = await updateStore(tierStoreId, {
+      // 1. Update store tier
+      const storeSuccess = await updateStore(tierStoreId, {
         tier: newTier,
       });
-      
-      if (success) {
-        alert(`Store tier updated to ${newTier} successfully!`);
+
+      if (!storeSuccess) {
+        alert('Failed to update store tier.');
+        setTierUpdating(false);
+        return;
+      }
+
+      // 2. Create/update subscription as PAID (counts toward revenue)
+      const subResult = await setStoreTierAdmin(tierStoreId, newTier, tierDurationMonths);
+
+      if (subResult.success) {
+        alert(`✅ Store tier set to ${newTier}!\n\n✓ Subscription marked as PAID\n✓ Payment recorded (ADMIN_MANUAL)\n✓ Valid for ${tierDurationMonths} months\n✓ Counts toward revenue`);
         setShowTierModal(false);
+        setTierDurationMonths(12); // Reset to default
         loadStores();
       } else {
-        alert('Failed to update tier.');
+        alert(`⚠️ Tier updated to ${newTier}, but failed to create subscription record. Please try again.`);
       }
     } catch (err) {
       alert('Error updating tier.');
+      console.error('Error:', err);
+    } finally {
+      setTierUpdating(false);
+    }
+  };
+
+  const handleUndoTierUpgrade = async (storeId: string) => {
+    if (!confirm('Are you sure you want to undo this tier upgrade? The subscription and payment record will be cancelled.')) return;
+    
+    setTierUpdating(true);
+    try {
+      const result = await undoAdminTierUpgrade(storeId);
+      if (result.success) {
+        alert('✅ Tier upgrade undone!\n\n✓ Subscription cancelled\n✓ Payment record removed');
+        loadStores();
+      } else {
+        alert('❌ Failed to undo tier upgrade:\n' + result.message);
+      }
+    } catch (err) {
+      alert('Error undoing tier upgrade.');
+      console.error('Error:', err);
     } finally {
       setTierUpdating(false);
     }
@@ -311,6 +357,20 @@ export const SuperAdminDashboard: React.FC = () => {
             >
               <Wallet className="w-5 h-5" />
               C2B Payments
+            </button>
+            <button 
+              onClick={() => setShowReminderPanel(true)}
+              className="bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-orange-900/20 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+            >
+              <Bell className="w-5 h-5" />
+              Send Reminders
+            </button>
+            <button 
+              onClick={() => setShowReminderHistory(true)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-indigo-900/20 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+            >
+              <History className="w-5 h-5" />
+              Reminder History
             </button>
             <button 
               onClick={() => setShowModal(true)}
@@ -436,6 +496,15 @@ export const SuperAdminDashboard: React.FC = () => {
                    >
                      <Crown className="w-3 h-3" />
                    </button>
+                   {(store.tier === 'PREMIUM' || store.tier === 'BASIC' || store.effectiveTier === 'PREMIUM' || store.effectiveTier === 'BASIC') && (
+                     <button 
+                       onClick={() => handleUndoTierUpgrade(store.id)}
+                       className="flex items-center justify-center gap-1 bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 px-3 rounded-lg text-xs font-bold transition"
+                       title="Undo Tier Upgrade"
+                     >
+                       <Undo className="w-3 h-3" />
+                     </button>
+                   )}
                    <button 
                      onClick={() => openLinkModal(store.id)}
                      className="flex items-center justify-center gap-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 py-2 px-3 rounded-lg text-xs font-bold transition"
@@ -848,8 +917,38 @@ export const SuperAdminDashboard: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="mt-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700 text-xs text-slate-300">
+                {/* Duration Selection */}
+                <div className="mt-6">
+                  <label className="block text-sm font-bold text-white mb-3">Subscription Duration</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1, 3, 6, 12, 24, 36].map((months) => (
+                      <button
+                        key={months}
+                        onClick={() => setTierDurationMonths(months)}
+                        className={`py-2 px-3 rounded-lg font-bold text-sm transition-all ${
+                          tierDurationMonths === months
+                            ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/50'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        {months}m
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">Selected: <span className="font-bold text-slate-200">{tierDurationMonths} months</span></p>
+                </div>
+
+                <div className="mt-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
                   <p><strong>⚠️ Note:</strong> This will override any existing subscription. Use carefully!</p>
+                  <div className="border-t border-slate-600 pt-3 space-y-1">
+                    <p className="text-green-400 font-medium">✓ What will happen:</p>
+                    <ul className="text-slate-400 space-y-1 ml-3">
+                      <li>• Mark subscription as PAID (not trial)</li>
+                      <li>• Record payment as ADMIN_MANUAL</li>
+                      <li>• Counts toward revenue tracking</li>
+                      <li>• Subscription valid for {tierDurationMonths} months</li>
+                    </ul>
+                  </div>
                 </div>
 
                 <div className="mt-6 flex gap-3">
@@ -895,6 +994,16 @@ export const SuperAdminDashboard: React.FC = () => {
         {/* C2B PAYMENTS MANAGER */}
         {showC2BManager && (
           <C2BPaymentsManager onClose={() => setShowC2BManager(false)} />
+        )}
+
+        {/* MANUAL REMINDER PANEL */}
+        {showReminderPanel && (
+          <ManualReminderPanel onClose={() => setShowReminderPanel(false)} />
+        )}
+
+        {/* REMINDER HISTORY PANEL */}
+        {showReminderHistory && (
+          <ReminderHistoryPanel onClose={() => setShowReminderHistory(false)} />
         )}
 
         {/* IntaSend Payment History */}
