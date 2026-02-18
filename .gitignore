@@ -23,11 +23,51 @@ dist-ssr
 *.sln
 *.sw?
 
-# Super Admin - NEVER DEPLOY
+# Environment variables & secrets (CRITICAL)
+.env
+.env.local
+.env.*.local
+.env.production.local
+.env.development.local
+
+# Sensitive documentation - INTERNAL ONLY
+SUPER_ADMIN_ACCESS.md
+ADMIN_MANUAL_PAYMENTS.md
+ADMIN_ACCESS.private.md
+admin-credentials.json
+admin-setup-guide.md
+internal-deployment-guide.md
+
+# Admin files
 admin.html
 SUPABASE_SCHEMA*.sql
 deploy-schema.ps1
 DEPLOY_SCHEMA_STEPS.md
-ADMIN_ACCESS.private.md
 
+# Credentials & keys
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+credentials*.json
+service-account*.json
+
+# Build artifacts
 .vercel
+.cache
+.build
+.output
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode
+.idea
+*.code-workspace
+*.sublime-workspace
