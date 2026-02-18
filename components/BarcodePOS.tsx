@@ -11,8 +11,10 @@ import {
   Loader2,
   DollarSign,
   Package,
+  Camera,
 } from 'lucide-react';
 import { findProductByBarcode, addItemToCart, createEmptyCart, removeFromCart, updateCartItemQuantity } from '../services/barcodePOSService';
+import { BarcodeScanner } from './BarcodeScanner';
 import { StoreProfile } from '../types';
 
 interface BarcodePOSProps {
@@ -57,6 +59,8 @@ export const BarcodePOS: React.FC<BarcodePOSProps> = ({ store, onClose, onChecko
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedItem, setSelectedItem] = useState<POSCartItem | null>(null);
+  const [showCameraScanner, setShowCameraScanner] = useState(true);
+  const [showPaymentPanel, setShowPaymentPanel] = useState(false);
 
   // Refs
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -110,7 +114,7 @@ export const BarcodePOS: React.FC<BarcodePOSProps> = ({ store, onClose, onChecko
       }
 
       // 2. Check stock
-      const availableStock = product.quantity_on_hand || product.current_stock || 0;
+      const availableStock = product.current_stock || 0;
       if (availableStock <= 0) {
         setError(`❌ "${product.item_name}" is out of stock`);
         setScanInput('');
@@ -171,25 +175,33 @@ export const BarcodePOS: React.FC<BarcodePOSProps> = ({ store, onClose, onChecko
       setError('Cart is empty');
       return;
     }
+    // Show built-in payment panel (MPESA, CASH, MADENI)
+    setShowPaymentPanel(true);
+    if (onCheckout) onCheckout(cart);
+  };
 
-    if (onCheckout) {
-      onCheckout(cart);
-    } else {
-      // Default: show checkout summary
-      alert(`Total: KES ${cart.total_amount.toLocaleString()}\nItems: ${cart.item_count}`);
-    }
+  const doPayment = (method: string) => {
+    // Placeholder: integrate real payment flow here
+    setShowPaymentPanel(false);
+    setSuccess(`Payment method: ${method} selected`);
+    // In real flow, you'd call backend and finalize sale. For now, clear cart.
+    setTimeout(() => setSuccess(''), 2000);
+    setCart(createEmptyCart());
+    focusScanInput();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-slate-900 rounded-2xl shadow-2xl w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-6xl border border-slate-800 overflow-hidden flex flex-col">
+    <>
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 p-2 sm:p-4 overflow-auto">
+        <div className="flex justify-center items-start py-4 sm:py-0 sm:items-center min-h-full">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full sm:max-w-6xl border border-slate-800 flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[90vh]">
         {/* Header */}
         <div className="p-3 sm:p-6 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800 shrink-0">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Scan className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500 shrink-0" />
             <div className="min-w-0">
               <h2 className="text-lg sm:text-2xl font-bold text-white truncate">Barcode POS</h2>
-              <p className="text-slate-400 text-xs sm:text-sm truncate">{store.store_name}</p>
+              <p className="text-slate-400 text-xs sm:text-sm truncate">{store.name}</p>
             </div>
           </div>
           <button
@@ -200,16 +212,16 @@ export const BarcodePOS: React.FC<BarcodePOSProps> = ({ store, onClose, onChecko
           </button>
         </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+        <div className="flex-1 overflow-y-auto flex flex-col lg:flex-row min-w-0">
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-y-auto">
             {/* Scan Input - Always Visible and Focused */}
             <div className="p-3 sm:p-6 bg-slate-800/50 border-b border-slate-700 shrink-0">
               <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2 flex items-center gap-2">
                 <Scan className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 shrink-0" />
                 <span>Scan Barcode</span>
               </label>
-              <div className="relative">
+              <div className="relative flex gap-2">
                 <input
                   ref={scanInputRef}
                   type="text"
@@ -219,13 +231,22 @@ export const BarcodePOS: React.FC<BarcodePOSProps> = ({ store, onClose, onChecko
                   placeholder="Scan barcode... (Enter)"
                   disabled={scanning}
                   autoComplete="off"
-                  className="w-full px-3 py-2 sm:px-4 sm:py-3 bg-slate-700 border-2 border-slate-600 text-white placeholder-slate-400 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 font-mono text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-3 py-2 sm:px-4 sm:py-3 bg-slate-700 border-2 border-slate-600 text-white placeholder-slate-400 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 font-mono text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 {scanning && (
-                  <div className="absolute right-3 top-2 sm:top-3">
+                  <div className="absolute right-16 top-2 sm:top-3">
                     <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500 animate-spin" />
                   </div>
                 )}
+                {/* Camera Scanner Button */}
+                <button
+                  onClick={() => setShowCameraScanner(true)}
+                  title="Open camera scanner"
+                  className="px-3 sm:px-4 py-2 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition flex items-center gap-2 text-sm sm:text-base shrink-0"
+                >
+                  <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">Scan</span>
+                </button>
               </div>
 
               {/* Status Messages */}
@@ -240,6 +261,22 @@ export const BarcodePOS: React.FC<BarcodePOSProps> = ({ store, onClose, onChecko
                 <div className="mt-2 sm:mt-3 flex items-start gap-2 p-2 sm:p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-xs sm:text-sm">
                   <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-400 shrink-0 mt-0.5" />
                   <p className="text-green-300">{success}</p>
+                </div>
+              )}
+
+              {/* Inline Camera Scanner (embedded in POS) */}
+              {showCameraScanner && (
+                <div className="mt-3 w-full">
+                  <BarcodeScanner
+                    inline
+                    autoStart={false}
+                    onDetected={(barcode) => {
+                      console.log('Camera detected barcode:', barcode);
+                      // Focus back to input so keyboard bridge works reliably
+                      focusScanInput();
+                    }}
+                    onClose={() => setShowCameraScanner(false)}
+                  />
                 </div>
               )}
 
@@ -356,6 +393,7 @@ export const BarcodePOS: React.FC<BarcodePOSProps> = ({ store, onClose, onChecko
             </div>
 
             {/* Action Buttons */}
+            {/* payment panel moved to modal for reliable visibility */}
             <div className="space-y-2 sm:space-y-3 mt-auto">
               <button
                 onClick={handleCheckout}
@@ -402,7 +440,27 @@ export const BarcodePOS: React.FC<BarcodePOSProps> = ({ store, onClose, onChecko
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Payment Modal - centered and always visible when active */}
+      {showPaymentPanel && (
+        <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-lg p-6 w-full max-w-md border border-slate-800 shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-4">Select Payment Method</h3>
+            <div className="text-center mb-4 text-sm text-slate-300">
+              Total: <span className="font-bold text-green-400">KES {cart.total_amount.toLocaleString()}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <button onClick={() => doPayment('MPESA')} className="py-3 px-2 bg-amber-500 hover:bg-amber-600 rounded-lg font-semibold text-white transition">💳 MPESA</button>
+              <button onClick={() => doPayment('CASH')} className="py-3 px-2 bg-green-500 hover:bg-green-600 rounded-lg font-semibold text-white transition">💵 CASH</button>
+              <button onClick={() => doPayment('MADENI')} className="py-3 px-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold text-white transition">🪙 MADENI</button>
+            </div>
+            <button onClick={() => setShowPaymentPanel(false)} className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-200">Cancel</button>
+          </div>
+        </div>
+      )}
+        </div>
+      </div>
+    </>
   );
 };
 

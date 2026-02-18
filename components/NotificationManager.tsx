@@ -21,7 +21,7 @@ export const NotificationManager: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [fcmToken, setFcmToken] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const { activeStore } = useStore();
+  const { currentStore: activeStore } = useStore();
 
   // Initialize on component mount
   useEffect(() => {

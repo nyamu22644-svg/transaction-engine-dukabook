@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchInventory, fetchRecentSales, addNewInventoryItem, updateStockLevel, deleteSale, fetchDebtors, fetchAuditLogs, performCashReconciliation, fetchExpenses, bulkAddInventoryItems, fetchAgents, addStaffMember, deleteStaffMember } from '../services/supabaseService';
 import { InventoryItem, SalesRecord, PaymentMode, StoreProfile, AuditLog, ExpenseRecord, Agent, EffectiveTier } from '../types';
 import { TrendingUp, AlertTriangle, Map, Banknote, Smartphone, Clock, Plus, PackagePlus, RefreshCcw, BarChart3, CreditCard, Share2, Calendar, Filter, AlertCircle, RotateCcw, AlertOctagon, Crown, FileText, ClipboardCheck, Wallet, ChevronDown, ChevronUp, History, Send, Download, Info, TrendingDown, Lock, FileSpreadsheet, Package, ScanLine, Users, UserPlus, Trash2, X, Truck, Bell, Sparkles, Search } from 'lucide-react';
+import { StoreCredentialsSettings } from './StoreCredentialsSettings';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { DebtorsList } from './DebtorsList';
 import { PremiumLock } from './ui/PremiumLock';
@@ -96,6 +97,9 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
   const [showDebtorDashboard, setShowDebtorDashboard] = useState(false);
   const [showBlindClose, setShowBlindClose] = useState(false);
   const [showDailyReconciliation, setShowDailyReconciliation] = useState(false);
+
+  // Settings State
+  const [showCredentialsSettings, setShowCredentialsSettings] = useState(false);
 
   // Premium Nudge State
   const [isTrialActive, setIsTrialActive] = useState(false);
@@ -753,10 +757,17 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
                   onClick={() => setShowSubscriptionPayment(true)}
                   className="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
                 >
-                  <CreditCard className="w-4 h-4" />
+                      <CreditCard className="w-4 h-4" />
                   {effectiveTier === 'PREMIUM' ? 'Renew' : effectiveTier === 'TRIAL' ? 'Subscribe' : 'Upgrade'}
                 </button>
               )}
+              <button
+                onClick={() => setShowCredentialsSettings(true)}
+                className="bg-white/20 hover:bg-white/30 backdrop-blur-sm p-2 rounded-lg transition"
+                title="Security Settings - Manage Access Codes & PIN"
+              >
+                <Lock className="w-5 h-5 text-white" />
+              </button>
               <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
                 <TrendingUp className="w-6 h-6 text-white" />
               </div>
@@ -881,7 +892,7 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
         </div>
 
         {/* Warranty Management - Check if store has electronics-related features */}
-        {(store.business_type === 'retail' || store.business_type?.includes?.('electron')) && (
+        {((store as any).business_type === 'retail' || (typeof (store as any).business_type === 'string' && (store as any).business_type.includes('electron'))) && (
           <div className="md:col-span-1">
             <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-200 shadow-sm p-4 space-y-3">
               <h3 className="font-bold text-purple-900 flex items-center gap-2 border-b border-purple-200 pb-2">
@@ -1409,6 +1420,15 @@ export const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ store, isD
             loadData();
           }}
           onClose={() => setShowInventoryHub(false)}
+        />
+      )}
+
+      {/* SECURITY SETTINGS MODAL */}
+      {showCredentialsSettings && (
+        <StoreCredentialsSettings
+          storeId={store.id}
+          storeName={store.name}
+          onClose={() => setShowCredentialsSettings(false)}
         />
       )}
 

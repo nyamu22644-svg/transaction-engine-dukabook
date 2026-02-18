@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { getStoreByAccessCode, getStoreById, fetchAllStores } from '../services/supabaseService';
 import { StoreProfile } from '../types';
 import { Lock, ArrowRight, Loader2, ShieldCheck, Mail, KeyRound, Play, MapPin, BookOpen, Smartphone } from 'lucide-react';
-import { logIn, AuthUser } from '../services/authService';
+import { logIn, AuthUser, generateUniqueAccessCode } from '../services/authService';
 import { StoreSetupWizard } from './StoreSetupWizard';
 import { createNewStore, linkOwnerToStore } from '../services/supabaseService';
 import { createTrialSubscription } from '../services/billingService';
@@ -330,11 +330,12 @@ export const StoreLogin: React.FC<StoreLoginProps> = ({ onLogin }) => {
                   setCreating(true);
                   setError('');
                   try {
+                    const accessCode = await generateUniqueAccessCode();
                     const store = await createNewStore({
                       owner_id: pendingUser.id,
                       name: newStoreName,
                       business_type: newBusinessType as any,
-                      access_code: `ACC${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+                      access_code: accessCode,
                       owner_pin: '1234',
                       location: newLocation,
                       currency: 'KES'

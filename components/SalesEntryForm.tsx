@@ -10,7 +10,6 @@ import { DebtorsList } from './DebtorsList';
 import { DemoLockModal } from './DemoLockModal';
 import { BarcodeScanner } from './BarcodeScanner';
 import { BarcodePOS } from './BarcodePOS';
-import { POSOverlay } from './POSOverlay';
 import { POSReceipt } from './POSReceipt';
 import { InventoryEntryHub } from './InventoryEntryHub';
 import { OfflineIndicator } from './ui/OfflineIndicator';
@@ -112,10 +111,6 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
   const [addingItem, setAddingItem] = useState(false);
   const [itemAddedSuccess, setItemAddedSuccess] = useState(false);
   const [scanFeedback, setScanFeedback] = useState<{type: 'found' | 'new' | null, message: string}>({type: null, message: ''});
-
-  // POS Overlay Modal State
-  const [showPOSOverlay, setShowPOSOverlay] = useState(false);
-  const [posReceipt, setPosReceipt] = useState<any>(null);
 
   // Barcode POS Modal State
   const [showBarcodePOS, setShowBarcodePOS] = useState(false);
@@ -371,8 +366,8 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
       });
 
       // Create warranty record if IMEI/Serial is provided (Electronics & Phone Repair)
-      if (itemImeiSerial && (bizConfig.businessType === 'Electronics' || bizConfig.businessType === 'Phone Repair')) {
-        const warrantyDays = selectedItem?.warranty_days || 365; // Default 1 year
+      if (itemImeiSerial && ((bizConfig as any).business_type === 'Electronics' || (bizConfig as any).business_type === 'Phone Repair')) {
+        const warrantyDays = (selectedItem as any)?.warranty_days || 365; // Default 1 year
         await createSerializedItem(
           store.id,
           saleId,
@@ -958,7 +953,7 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
            <div className="grid grid-cols-3 gap-3">
                <button 
                  type="button"
-                 onClick={() => setShowPOSOverlay(true)}
+                 onClick={() => setShowBarcodePOS(true)}
                  className="bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-200 py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all transform hover:scale-[1.02] active:scale-95 border border-blue-500"
                >
                  <div className="flex items-center gap-2">
@@ -1296,7 +1291,7 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
             </div>
 
             {/* IMEI / Serial Number - For Electronics & Phone Repair */}
-            {selectedItem && (bizConfig.businessType === 'Electronics' || bizConfig.businessType === 'Phone Repair') && (
+            {selectedItem && ((bizConfig as any).business_type === 'Electronics' || (bizConfig as any).business_type === 'Phone Repair') && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   IMEI / Serial Number <span className="text-slate-400 font-normal">(Optional)</span>
@@ -1558,42 +1553,6 @@ export const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ store, isDemoMod
         <BarcodeScanner
           onDetected={handleBarcodeScan}
           onClose={() => setShowScanner(false)}
-        />
-      )}
-
-      {/* POS Overlay Modal (Full Screen) */}
-      {showPOSOverlay && (
-        <POSOverlay
-          store={store}
-          onClose={() => setShowPOSOverlay(false)}
-          onCheckout={async (data) => {
-            try {
-              const { cart, payment } = data;
-              
-              // Record the POS sale to database
-              const result = await recordPOSSale(
-                store.id,
-                cart,
-                payment,
-                user?.id
-              );
-
-              // Show receipt
-              setPosReceipt(result.receiptData);
-              setShowPOSOverlay(false);
-            } catch (error) {
-              console.error('Failed to record sale:', error);
-              alert('Failed to record sale. Please try again.');
-            }
-          }}
-        />
-      )}
-
-      {/* POS Receipt Modal */}
-      {posReceipt && (
-        <POSReceipt
-          receipt={posReceipt}
-          onClose={() => setPosReceipt(null)}
         />
       )}
 

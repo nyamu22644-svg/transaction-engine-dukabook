@@ -248,8 +248,7 @@ export const StaffBarcodeEntry: React.FC<StaffBarcodeEntryProps> = ({
       {/* Barcode Scanner Modal */}
       {showScanner && (
         <BarcodeScanner
-          existingBarcodes={[]}
-          onScan={handleBarcodeScan}
+          onDetected={handleBarcodeScan}
           onClose={() => setShowScanner(false)}
         />
       )}

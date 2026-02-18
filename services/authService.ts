@@ -1,18 +1,14 @@
 import { UserRole, StoreProfile, User } from '../types';
 import { supabase, isSupabaseEnabled } from './supabaseClient';
 import { createTrialSubscription } from './billingService';
+import { generateUniqueAccessCode } from './credentialService';
 
 // ============================================================================
 // AUTHENTICATION SERVICE
 // ============================================================================
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  full_name: string;
-  role: UserRole;
-  store_id?: string;
-}
+// Re-export generateUniqueAccessCode for backward compatibility
+export { generateUniqueAccessCode };
 
 export interface SignUpPayload {
   email: string;
@@ -34,16 +30,16 @@ export const signUp = async (payload: SignUpPayload): Promise<{ user: AuthUser; 
 
   try {
     // STEP 1: Create store FIRST (with temporary owner_id, will update after auth user is created)
-    const storeId = `store_${Math.random().toString(36).substr(2, 9)}`;
+    // Let the database auto-generate the UUID ID
+    const accessCode = await generateUniqueAccessCode();
     const { data: storeData, error: storeError } = await supabase
       .from('stores')
       .insert({
-        id: storeId,
         owner_id: null, // Will update after auth user is created
         name: payload.storeName || `${payload.full_name}'s Store`,
         business_type: payload.businessType || 'GENERAL',
-        access_code: `ACC${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-        owner_pin: '1234', // Default, should be changed
+        access_code: accessCode,
+        owner_pin: payload.businessType ? '1234' : '1234', // Default, should be changed
       })
       .select()
       .single();
@@ -52,6 +48,8 @@ export const signUp = async (payload: SignUpPayload): Promise<{ user: AuthUser; 
       console.error('Store creation failed:', storeError);
       throw new Error('Failed to create store. Please try again.');
     }
+
+    const storeId = storeData.id;
 
     // STEP 2: Check if email already exists in users table (catch early before auth)
     const { data: existingUser } = await supabase

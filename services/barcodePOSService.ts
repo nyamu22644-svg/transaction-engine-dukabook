@@ -71,7 +71,7 @@ export const addItemToCart = (
   quantityToAdd: number = 1
 ): POSCartState => {
   // Check stock availability
-  const availableStock = product.quantity_on_hand || product.current_stock || 0;
+  const availableStock = product.current_stock || 0;
   
   if (availableStock <= 0) {
     console.warn(`❌ Product "${product.item_name}" is out of stock`);

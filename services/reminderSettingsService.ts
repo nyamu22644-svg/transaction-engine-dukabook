@@ -50,8 +50,7 @@ export const updateReminderSettings = async (
         updated_at: new Date().toISOString(),
         updated_by: updatedBy,
       })
-      .single()
-      .select();
+      .single();
 
     if (error) {
       console.error('Error updating reminder settings:', error);

@@ -153,14 +153,6 @@ export const DualModeScannerInput: React.FC<DualModeScannerInputProps> = ({
       return;
     }
 
-    // Check if we're on localhost - camera may not work on HTTP
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (isLocalhost && window.location.protocol !== 'https:') {
-      setError('⚠️ Camera requires HTTPS. Use USB scanner mode on localhost.');
-      setScanning(false);
-      return;
-    }
-
     try {
       setScanning(true);
       setError('');
@@ -384,7 +376,7 @@ export const DualModeScannerInput: React.FC<DualModeScannerInputProps> = ({
         <div className="relative w-full bg-black rounded-lg overflow-hidden" style={{ minHeight: '400px' }}>
           {/* Video element for Quagga2 - required for camera access */}
           <video
-            ref={cameraRef}
+            ref={cameraRef as any}
             className="w-full h-full object-cover"
             autoPlay
             muted

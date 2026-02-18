@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StoreProfile, BusinessType } from '../types';
-import { signUp, AuthUser } from '../services/authService';
+import { signUp, generateUniqueAccessCode } from '../services/authService';
 import { createNewStore, linkOwnerToStore } from '../services/supabaseService';
 import { createTrialSubscription } from '../services/billingService';
 import { 
@@ -246,11 +246,12 @@ export const StoreSetupWizard: React.FC<StoreSetupWizardProps> = ({ onComplete, 
       setError('');
 
       try {
+        const accessCode = await generateUniqueAccessCode();
         const newStore = await createNewStore({
           owner_id: pendingExistingUser.id,
           name: storeName || `${pendingExistingUser.full_name}'s Store`,
           business_type: businessType,
-          access_code: `ACC${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+          access_code: accessCode,
           owner_pin: ownerPin || '1234',
           location,
           currency: 'KES'

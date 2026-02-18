@@ -28,6 +28,7 @@
   },
   "exclude": [
     "supabase/functions",
-    "api"
+    "api",
+    "node_modules/@ericblade/quagga2"
   ]
 }

@@ -369,8 +369,7 @@ export const InventoryEntryHub: React.FC<InventoryEntryHubProps> = ({
                     ← Back to Methods
                   </button>
                   <BarcodeScanner
-                    existingBarcodes={existingBarcodes}
-                    onScan={handleBarcodeScan}
+                    onDetected={handleBarcodeScan}
                     onClose={() => setMethod('SELECT')}
                   />
                 </div>

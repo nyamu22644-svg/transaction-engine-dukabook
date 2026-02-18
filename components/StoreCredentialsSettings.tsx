@@ -16,12 +16,8 @@ interface StoreCredentialsSettingsProps {
 }
 
 interface AccessCode {
-  id: string;
   code: string;
-  label: string | null;
-  is_active: boolean;
-  created_at: string;
-  usage_count: number;
+  created_at?: string;
 }
 
 export const StoreCredentialsSettings: React.FC<StoreCredentialsSettingsProps> = ({
@@ -34,6 +30,7 @@ export const StoreCredentialsSettings: React.FC<StoreCredentialsSettingsProps> =
   const [loading, setLoading] = useState(true);
   const [creatingCode, setCreatingCode] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [deletingCode, setDeletingCode] = useState<string | null>(null);
 
   // PIN state
   const [showPinForm, setShowPinForm] = useState(false);
@@ -63,21 +60,27 @@ export const StoreCredentialsSettings: React.FC<StoreCredentialsSettingsProps> =
 
   const handleCreateCode = async () => {
     setCreatingCode(true);
-    const newCode = await createAccessCode(storeId, 'Access Code');
+    const newCode = await createAccessCode(storeId);
     if (newCode) {
-      setAccessCodes([newCode, ...accessCodes]);
-      // Auto-copy new code
-      copyToClipboard(newCode.code);
+      await loadAccessCodes();
+      copyToClipboard((newCode as any).code || newCode);
+    } else {
+      alert('Failed to create access code. Please try again.');
     }
     setCreatingCode(false);
   };
 
-  const handleDeactivateCode = async (codeId: string) => {
-    if (!confirm('Deactivate this access code? Users won\'t be able to use it.')) return;
+  const handleDeleteCode = async (codeId: string) => {
+    if (!confirm('Deactivate this access code? Staff using this code will no longer be able to access the store.')) return;
+    
+    setDeletingCode(codeId);
     const success = await deactivateAccessCode(codeId);
     if (success) {
-      setAccessCodes(accessCodes.map(c => c.id === codeId ? { ...c, is_active: false } : c));
+      await loadAccessCodes();
+    } else {
+      alert('Failed to deactivate code');
     }
+    setDeletingCode(null);
   };
 
   const copyToClipboard = (text: string) => {
@@ -187,67 +190,80 @@ export const StoreCredentialsSettings: React.FC<StoreCredentialsSettingsProps> =
           {activeTab === 'codes' && (
             <div className="space-y-6">
               <p className="text-slate-600 text-sm">
-                Create unique access codes for staff members or guests. Each code can be tracked and revoked independently.
+                Your primary staff code is automatically generated. Create additional codes for different staff members or temporary use.
               </p>
 
               <button
                 onClick={handleCreateCode}
-                disabled={creatingCode}
+                disabled={creatingCode || loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
               >
                 <Plus className="w-5 h-5" />
-                {creatingCode ? 'Generating...' : 'Generate New Access Code'}
+                {creatingCode ? 'Generating...' : 'Create Additional Access Code'}
               </button>
 
               {loading ? (
-                <div className="text-center py-8 text-slate-500">Loading codes...</div>
+                <div className="text-center py-8 text-slate-500">Loading access codes...</div>
               ) : accessCodes.length === 0 ? (
                 <div className="bg-slate-50 rounded-lg p-8 text-center">
                   <Key className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-600">No access codes yet. Create one to get started.</p>
+                  <p className="text-slate-600 mb-4">No access codes found.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {accessCodes.map((code) => (
                     <div
                       key={code.id}
-                      className={`p-4 rounded-lg border-2 transition-colors ${
-                        code.is_active
-                          ? 'bg-green-50 border-green-200'
-                          : 'bg-slate-50 border-slate-200 opacity-60'
+                      className={`border-2 p-4 rounded-lg flex items-center justify-between gap-4 ${
+                        code.is_primary
+                          ? 'border-amber-200 bg-amber-50'
+                          : code.is_active ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <code className="font-mono text-lg font-bold text-slate-900 bg-slate-100 px-3 py-1 rounded">
-                              {code.code}
-                            </code>
-                            <button
-                              onClick={() => copyToClipboard(code.code)}
-                              className="p-2 text-slate-600 hover:text-blue-600 transition-colors"
-                              title="Copy code"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                            {copiedCode === code.code && (
-                              <span className="text-xs text-green-600 font-medium">Copied!</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-500">
-                            {code.is_active ? '✅ Active' : '🔒 Deactivated'} • Used {code.usage_count} times
-                          </p>
-                        </div>
-                        {code.is_active && (
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <code className="font-mono text-lg font-bold text-slate-900 bg-slate-100 px-3 py-1 rounded">
+                            {code.code}
+                          </code>
+                          {code.is_primary && (
+                            <span className="px-2 py-1 bg-amber-500 text-white text-xs font-bold rounded">PRIMARY</span>
+                          )}
+                          {!code.is_active && (
+                            <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded">INACTIVE</span>
+                          )}
                           <button
-                            onClick={() => handleDeactivateCode(code.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Deactivate code"
+                            onClick={() => copyToClipboard(code.code)}
+                            className="p-2 text-slate-600 hover:text-blue-600 transition-colors"
+                            title="Copy code"
                           >
-                            <Trash2 className="w-5 h-5" />
+                            <Copy className="w-4 h-4" />
                           </button>
-                        )}
+                          {copiedCode === code.code && (
+                            <span className="text-xs text-green-600 font-medium">Copied!</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-600">
+                          {code.label || 'Access Code'}
+                          {code.created_at && (
+                            <> • {new Date(code.created_at).toLocaleDateString()}</>
+                          )}
+                        </p>
                       </div>
+                      {!code.is_primary && (
+                        <button
+                          onClick={() => handleDeleteCode(code.id)}
+                          disabled={deletingCode === code.id}
+                          className="p-2 text-slate-600 hover:text-red-600 disabled:opacity-50 transition-colors"
+                          title="Deactivate code"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {code.is_primary && (
+                        <div className="text-xs text-slate-600 px-3 py-2 bg-slate-100 rounded">
+                          Cannot delete primary code
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
