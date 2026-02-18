@@ -7,17 +7,13 @@ import {
   getStoreCredentialsInfo,
   updateStorePin,
   updateStorePassword,
+  type AccessCode,
 } from '../services/credentialService';
 
 interface StoreCredentialsSettingsProps {
   storeId: string;
   storeName: string;
   onClose: () => void;
-}
-
-interface AccessCode {
-  code: string;
-  created_at?: string;
 }
 
 export const StoreCredentialsSettings: React.FC<StoreCredentialsSettingsProps> = ({

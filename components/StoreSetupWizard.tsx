@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StoreProfile, BusinessType } from '../types';
+import { StoreProfile, BusinessType, AuthUser } from '../types';
 import { signUp, generateUniqueAccessCode } from '../services/authService';
 import { createNewStore, linkOwnerToStore } from '../services/supabaseService';
 import { createTrialSubscription } from '../services/billingService';

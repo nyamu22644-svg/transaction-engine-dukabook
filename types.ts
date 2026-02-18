@@ -39,6 +39,14 @@ export interface User {
   created_at: string;
 }
 
+// Auth user (includes Supabase metadata)
+export interface AuthUser extends User {
+  aud?: string;
+  provider?: string;
+  store_id?: string;
+  needsStoreCreation?: boolean;
+}
+
 export interface StoreProfile {
   id: string;
   name: string;

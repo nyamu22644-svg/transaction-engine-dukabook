@@ -1,4 +1,4 @@
-import { UserRole, StoreProfile, User } from '../types';
+import { UserRole, StoreProfile, User, AuthUser } from '../types';
 import { supabase, isSupabaseEnabled } from './supabaseClient';
 import { createTrialSubscription } from './billingService';
 import { generateUniqueAccessCode } from './credentialService';
@@ -147,6 +147,8 @@ export const signUp = async (payload: SignUpPayload): Promise<{ user: AuthUser; 
         full_name: payload.full_name,
         role: 'STORE_OWNER',
         store_id: storeId,
+        is_active: true,
+        created_at: new Date().toISOString(),
       },
       store: storeData as StoreProfile,
     };
@@ -217,13 +219,17 @@ export const logIn = async (email: string, password: string): Promise<AuthUser |
 
     console.log('Login complete for store:', storeId);
 
-    return {
+    const authUser: AuthUser = {
       id: userData.id,
       email: userData.email,
       full_name: userData.full_name,
+      phone: userData.phone,
       role: userData.role,
       store_id: storeId,
+      is_active: userData.is_active || true,
+      created_at: userData.created_at || new Date().toISOString(),
     };
+    return authUser;
   } catch (error: any) {
     console.error('Login error:', error?.message || error);
     return null;
@@ -264,13 +270,17 @@ export const getCurrentUser = async (): Promise<AuthUser | null> => {
 
     if (!userData) return null;
 
-    return {
+    const currentAuthUser: AuthUser = {
       id: userData.id,
       email: userData.email,
       full_name: userData.full_name,
+      phone: userData.phone,
       role: userData.role,
       store_id: userData.store_id,
+      is_active: userData.is_active || true,
+      created_at: userData.created_at || new Date().toISOString(),
     };
+    return currentAuthUser;
   } catch (error) {
     console.error('Get current user error:', error);
     return null;
@@ -352,13 +362,17 @@ export const createEmployee = async (
 
     if (userError) throw userError;
 
-    return {
+    const newEmployee: AuthUser = {
       id: userData.id,
       email: userData.email,
       full_name: userData.full_name,
+      phone: userData.phone,
       role: userData.role,
       store_id: userData.store_id,
+      is_active: userData.is_active || true,
+      created_at: userData.created_at || new Date().toISOString(),
     };
+    return newEmployee;
   } catch (error) {
     console.error('Create employee error:', error);
     return null;
@@ -380,13 +394,17 @@ export const getStoreEmployees = async (storeId: string): Promise<AuthUser[]> =>
 
     if (error) throw error;
 
-    return users.map(u => ({
+    const employees: AuthUser[] = users.map(u => ({
       id: u.id,
       email: u.email,
       full_name: u.full_name,
+      phone: u.phone,
       role: u.role,
       store_id: u.store_id,
-    }));
+      is_active: u.is_active || true,
+      created_at: u.created_at || new Date().toISOString(),
+    } as AuthUser));
+    return employees;
   } catch (error) {
     console.error('Get employees error:', error);
     return [];

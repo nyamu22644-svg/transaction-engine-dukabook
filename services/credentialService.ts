@@ -2,13 +2,13 @@ import { supabase } from './supabaseClient';
 
 const isSupabaseEnabled = !!supabase;
 
-interface AccessCode {
+export interface AccessCode {
   id: string;
   code: string;
-  label: string;
+  label: string | null;
   is_active: boolean;
   created_at: string;
-  is_primary?: boolean;
+  is_primary: boolean;
 }
 
 interface Credentials {
